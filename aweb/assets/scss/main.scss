@@ -1,0 +1,123 @@
+// Global styles for suge-shift-web-prototype
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+}
+
+// Gantt board styles
+.gantt-wrapper {
+  display: flex;
+  overflow: hidden;
+  height: calc(100vh - 70px - 88px);
+  position: relative;
+}
+
+.gantt-main {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  position: relative;
+  scroll-behavior: smooth;
+}
+
+.gantt-grid {
+  display: grid;
+  min-width: max-content;
+}
+
+.gantt-employee-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: white;
+}
+
+.gantt-date-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: white;
+}
+
+.gantt-corner {
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  background: white;
+}
+
+.gantt-cost-panel {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  width: 280px;
+  overflow-y: auto;
+  background: white;
+  border-left: 1px solid #e0e1e4;
+}
+
+// Cell status colors
+.cell-confirmed {
+  background-color: #DBEAFE;
+}
+
+.cell-day-off {
+  background-color: #F3F4F6;
+}
+
+.cell-adjusting {
+  background-color: #FEF3C7;
+}
+
+.cell-undecided {
+  background-color: #FFFFFF;
+}
+
+// Sidebar styles
+.sidebar-nav-item {
+  border-radius: 8px;
+  margin: 2px 8px;
+}
+
+.sidebar-nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-nav-item.active {
+  background-color: rgba(53, 135, 220, 0.3);
+}
+
+// Scrollbar styles
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+// Transition
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
