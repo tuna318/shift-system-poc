@@ -1,0 +1,25 @@
+{
+  "name": "attendance-mobile-prototype",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev --port 3003",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "@nuxtjs/google-fonts": "^3.2.0",
+    "@pinia/nuxt": "^0.5.5",
+    "nuxt": "^3.13.0",
+    "pinia": "^2.2.4",
+    "vue": "^3.5.11",
+    "vue-router": "^4.4.5",
+    "vuetify": "^3.7.2"
+  },
+  "devDependencies": {
+    "sass": "^1.77.8",
+    "vite-plugin-vuetify": "^2.0.4"
+  }
+}
