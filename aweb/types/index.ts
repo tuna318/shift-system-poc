@@ -47,6 +47,7 @@ export interface ShiftBoard {
   budgetAmount: number
   entries: ShiftEntry[]
   createdAt: string
+  collectionId?: string
 }
 
 export interface AttendanceRecord {

@@ -168,6 +168,17 @@ for (const plan of entryPlan) {
 // ============================================================
 const boards: ShiftBoard[] = [
   {
+    id: 'board-2026-04',
+    name: '2026年4月 シフトボード',
+    status: 'DRAFT',
+    periodStart: '2026-04-01',
+    periodEnd: '2026-04-30',
+    budgetAmount: 820000,
+    entries: [],
+    createdAt: '2026-03-05T09:00:00',
+    collectionId: 'coll-002',
+  },
+  {
     id: 'board-2026-03',
     name: '2026年3月 シフトボード',
     status: 'DRAFT',
@@ -176,6 +187,7 @@ const boards: ShiftBoard[] = [
     budgetAmount: 800000,
     entries: marchEntries,
     createdAt: '2026-02-15T09:00:00',
+    collectionId: 'coll-001',
   },
   {
     id: 'board-2026-02',
@@ -186,6 +198,7 @@ const boards: ShiftBoard[] = [
     budgetAmount: 750000,
     entries: [],
     createdAt: '2026-01-20T09:00:00',
+    collectionId: 'coll-000',
   },
 ]
 
@@ -321,6 +334,21 @@ const allEmpIds = employees.filter(e => e.status === 'ACTIVE').map(e => e.id)
 
 const collections: CollectionRequest[] = [
   {
+    id: 'coll-000',
+    name: '2026年2月 シフト収集',
+    status: 'CLOSED',
+    periodStart: '2026-02-01',
+    periodEnd: '2026-02-28',
+    deadline: '2026-01-20',
+    totalTargets: 14,
+    submittedCount: 14,
+    submissions: allEmpIds.slice(0, 14).map(id => ({
+      employeeId: id,
+      submitted: true,
+      submittedAt: '2026-01-18T10:00:00',
+    })),
+  },
+  {
     id: 'coll-001',
     name: '2026年3月 シフト収集',
     status: 'CLOSED',
@@ -403,6 +431,12 @@ function getEmployee(id: string): Employee | undefined {
   return employees.find(e => e.id === id)
 }
 
+function getCollectionForBoard(boardId: string): CollectionRequest | undefined {
+  const board = boards.find(b => b.id === boardId)
+  if (!board?.collectionId) return undefined
+  return collections.find(c => c.id === board.collectionId)
+}
+
 function getEntriesForDate(boardId: string, date: string): ShiftEntry[] {
   const board = boards.find(b => b.id === boardId)
   if (!board) return []
@@ -467,5 +501,6 @@ export function useMockData() {
     getEntriesForDate,
     getPreference,
     getCostSummary,
+    getCollectionForBoard,
   }
 }

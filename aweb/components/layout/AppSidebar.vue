@@ -53,16 +53,7 @@
         <v-list-item
           to="/shifts/board"
           prepend-icon="mdi-table-large"
-          title="シフトボード"
-          active-color="white"
-          color="rgba(255,255,255,0.6)"
-          rounded="lg"
-          class="sidebar-item ml-3"
-        />
-        <v-list-item
-          to="/shifts/collections"
-          prepend-icon="mdi-clipboard-list-outline"
-          title="シフト収集"
+          title="シフト管理"
           active-color="white"
           color="rgba(255,255,255,0.6)"
           rounded="lg"
@@ -98,24 +89,9 @@
           class="sidebar-item"
         >
           <template #prepend>
-            <v-tooltip location="right" text="シフトボード">
+            <v-tooltip location="right" text="シフト管理">
               <template #activator="{ props }">
                 <v-icon v-bind="props">mdi-table-large</v-icon>
-              </template>
-            </v-tooltip>
-          </template>
-        </v-list-item>
-        <v-list-item
-          to="/shifts/collections"
-          color="rgba(255,255,255,0.6)"
-          active-color="white"
-          rounded="lg"
-          class="sidebar-item"
-        >
-          <template #prepend>
-            <v-tooltip location="right" text="シフト収集">
-              <template #activator="{ props }">
-                <v-icon v-bind="props">mdi-clipboard-list-outline</v-icon>
               </template>
             </v-tooltip>
           </template>
