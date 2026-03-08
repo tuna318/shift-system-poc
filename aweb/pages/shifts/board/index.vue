@@ -5,7 +5,7 @@
         <h1 class="text-h5 font-weight-bold">シフト管理</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">収集からボード作成・公開まで一元管理</p>
       </div>
-      <v-btn color="primary" prepend-icon="mdi-plus" rounded="lg">
+      <v-btn to="/shifts/board/new" color="primary" prepend-icon="mdi-plus" rounded="lg">
         新規作成
       </v-btn>
     </div>
