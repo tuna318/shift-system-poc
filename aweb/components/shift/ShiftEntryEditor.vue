@@ -93,11 +93,28 @@
               </div>
             </div>
 
-            <div v-if="workHours > 0" class="d-flex align-center ga-2 pa-2 rounded-lg" style="background: #EBF3FC">
-              <v-icon color="primary" size="16">mdi-timer-outline</v-icon>
-              <span class="text-caption text-primary">
-                勤務時間: {{ workHours }}時間 / 見込み賃金: ¥{{ estimatedWage.toLocaleString() }}
-              </span>
+            <div v-if="workHours > 0" class="d-flex flex-column ga-1">
+              <div class="d-flex align-center ga-2 pa-2 rounded-lg" style="background: #EBF3FC">
+                <v-icon color="primary" size="16">mdi-timer-outline</v-icon>
+                <span class="text-caption text-primary">
+                  勤務時間: {{ workHours }}時間 / 見込み賃金: ¥{{ estimatedWage.toLocaleString() }}
+                </span>
+              </div>
+              <div class="d-flex align-center ga-2 pa-2 rounded-lg" style="background: #F8F9FA">
+                <v-icon color="medium-emphasis" size="16">mdi-chart-bar</v-icon>
+                <span class="text-caption text-medium-emphasis">
+                  今月累計: {{ Math.round(currentMonthlyHours * 10) / 10 }}h → {{ projectedHours }}h / 上限 {{ employeeMaxHours }}h
+                </span>
+                <span class="text-caption text-medium-emphasis ml-auto">
+                  残り {{ Math.max(0, employeeMaxHours - projectedHours) }}h
+                </span>
+              </div>
+              <div v-if="wouldExceedLimit" class="d-flex align-center ga-2 pa-2 rounded-lg" style="background: #FFFBEB">
+                <v-icon color="warning" size="16">mdi-alert-outline</v-icon>
+                <span class="text-caption" style="color: #92400e">
+                  このシフトを追加すると上限（{{ employeeMaxHours }}h）を超えます
+                </span>
+              </div>
             </div>
           </template>
 
@@ -143,6 +160,7 @@
 
 <script setup lang="ts">
 import { useMockData } from '~/composables/useMockData'
+import { useShiftStore, MAX_MONTHLY_HOURS } from '~/stores/shift.store'
 import type { ShiftEntry, CellStatus } from '~/types'
 
 const props = defineProps<{
@@ -159,6 +177,7 @@ const emit = defineEmits<{
 }>()
 
 const { getEmployee } = useMockData()
+const shiftStore = useShiftStore()
 
 const dialog = computed({
   get: () => props.modelValue,
@@ -271,6 +290,24 @@ const workHours = computed(() => {
 })
 
 const estimatedWage = computed(() => Math.round(hourlyWage.value * workHours.value))
+
+const employeeMaxHours = computed(() => {
+  const emp = getEmployee(props.employeeId)
+  return emp ? MAX_MONTHLY_HOURS[emp.employmentType] : 160
+})
+
+const currentMonthlyHours = computed(() => {
+  return shiftStore.entries
+    .filter(e => e.employeeId === props.employeeId && e.id !== props.entry?.id)
+    .reduce((sum, e) => {
+      const [sh, sm] = e.startTime.split(':').map(Number)
+      const [eh, em] = e.endTime.split(':').map(Number)
+      return sum + (eh * 60 + em - (sh * 60 + sm)) / 60
+    }, 0)
+})
+
+const projectedHours = computed(() => Math.round((currentMonthlyHours.value + workHours.value) * 10) / 10)
+const wouldExceedLimit = computed(() => projectedHours.value > employeeMaxHours.value)
 
 const isValid = computed(() =>
   showTimeFields.value ? (!!form.startTime && !!form.endTime && workHours.value > 0) : true

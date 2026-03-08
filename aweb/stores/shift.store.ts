@@ -1,6 +1,13 @@
 import { defineStore } from 'pinia'
-import type { ShiftBoard, ShiftEntry, CellStatus } from '~/types'
+import type { ShiftBoard, ShiftEntry, CellStatus, EmploymentType } from '~/types'
 import { useMockData } from '~/composables/useMockData'
+
+export const MAX_MONTHLY_HOURS: Record<EmploymentType, number> = {
+  FULL_TIME: 176,
+  PART_TIME: 120,
+  FLEX: 160,
+  DISCRETIONARY: 160,
+}
 
 interface PendingCellMenu {
   entryId: string
@@ -35,6 +42,24 @@ export const useShiftStore = defineStore('shift', {
         map.set(entry.shiftDate, list)
       }
       return map
+    },
+
+    perEmployeeStats(): Array<{ employeeId: string; hours: number; cost: number; maxHours: number; isOver: boolean }> {
+      const { getEmployee } = useMockData()
+      const empMap = new Map<string, { hours: number; cost: number }>()
+      for (const entry of this.entries) {
+        const [sh, sm] = entry.startTime.split(':').map(Number)
+        const [eh, em] = entry.endTime.split(':').map(Number)
+        const h = (eh * 60 + em - (sh * 60 + sm)) / 60
+        const cur = empMap.get(entry.employeeId) ?? { hours: 0, cost: 0 }
+        empMap.set(entry.employeeId, { hours: cur.hours + h, cost: cur.cost + entry.estimatedWage })
+      }
+      return Array.from(empMap.entries()).map(([empId, data]) => {
+        const emp = getEmployee(empId)
+        const maxHours = emp ? MAX_MONTHLY_HOURS[emp.employmentType] : 160
+        const hours = Math.round(data.hours * 10) / 10
+        return { employeeId: empId, hours, cost: data.cost, maxHours, isOver: hours > maxHours }
+      })
     },
 
     costSummary(): { totalCost: number; budget: number; variance: number } {

@@ -29,6 +29,11 @@
           </div>
         </div>
 
+        <!-- Stats column header -->
+        <div class="gantt-stats-header gantt-cell gantt-header-cell">
+          <span class="text-caption text-medium-emphasis">時間 / コスト</span>
+        </div>
+
         <!-- ── ROWS 1+: Employees ── -->
         <template v-for="emp in employees" :key="emp.id">
           <!-- Employee name column -->
@@ -40,6 +45,16 @@
               <div class="overflow-hidden">
                 <div class="text-caption font-weight-medium text-truncate" style="max-width: 130px">{{ emp.name }}</div>
                 <div class="text-caption text-medium-emphasis" style="font-size: 9px">{{ emp.department }}</div>
+                <div v-if="empStats(emp.id)" class="d-flex align-center ga-1 mt-1">
+                  <v-icon v-if="empStats(emp.id)!.isOver" size="10" color="error">mdi-alert</v-icon>
+                  <span
+                    class="text-caption"
+                    style="font-size: 9px"
+                    :class="empStats(emp.id)!.isOver ? 'text-error font-weight-bold' : 'text-medium-emphasis'"
+                  >{{ empStats(emp.id)!.hours }}h</span>
+                  <span class="text-caption text-medium-emphasis" style="font-size: 9px">·</span>
+                  <span class="text-caption text-medium-emphasis" style="font-size: 9px">¥{{ empStats(emp.id)!.cost.toLocaleString() }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -67,6 +82,34 @@
             <div v-if="getEntries(emp.id, day.date).length === 0" class="cell-add-hint">
               <v-icon size="14" color="medium-emphasis">mdi-plus</v-icon>
             </div>
+          </div>
+
+          <!-- Stats column cell -->
+          <div class="gantt-stats-col gantt-cell">
+            <template v-if="empStats(emp.id)">
+              <div class="px-2 py-1 w-100">
+                <div class="d-flex justify-space-between align-center mb-1">
+                  <span
+                    class="text-caption"
+                    style="font-size: 10px"
+                    :class="empStats(emp.id)!.isOver ? 'text-error font-weight-bold' : 'text-medium-emphasis'"
+                  >
+                    {{ empStats(emp.id)!.hours }}h / {{ empStats(emp.id)!.maxHours }}h
+                  </span>
+                  <v-icon v-if="empStats(emp.id)!.isOver" size="11" color="error">mdi-alert</v-icon>
+                </div>
+                <v-progress-linear
+                  :model-value="Math.min(100, (empStats(emp.id)!.hours / empStats(emp.id)!.maxHours) * 100)"
+                  :color="empStats(emp.id)!.isOver ? 'error' : 'primary'"
+                  bg-color="#E0E1E4"
+                  height="3"
+                  rounded
+                />
+                <div class="text-caption text-medium-emphasis mt-1" style="font-size: 10px">
+                  ¥{{ empStats(emp.id)!.cost.toLocaleString() }}
+                </div>
+              </div>
+            </template>
           </div>
         </template>
       </div>
@@ -101,6 +144,16 @@ const props = defineProps<{
 const shiftStore = useShiftStore()
 const { employees: allEmployees } = useMockData()
 
+const empStatsMap = computed(() => {
+  const map = new Map<string, (typeof shiftStore.perEmployeeStats)[0]>()
+  for (const s of shiftStore.perEmployeeStats) map.set(s.employeeId, s)
+  return map
+})
+
+function empStats(empId: string) {
+  return empStatsMap.value.get(empId)
+}
+
 const employees = computed(() =>
   allEmployees.filter(e => e.status === 'ACTIVE')
 )
@@ -126,7 +179,7 @@ const days = computed(() => {
 })
 
 const gridStyle = computed(() => ({
-  gridTemplateColumns: `200px repeat(${days.value.length}, 80px)`,
+  gridTemplateColumns: `200px repeat(${days.value.length}, 80px) 160px`,
 }))
 
 // Entries lookup
@@ -237,6 +290,7 @@ const mainRef = ref<HTMLElement | null>(null)
   display: flex;
   align-items: center;
   border-left: 1px solid #e0e1e4;
+  min-height: 64px;
 }
 
 .gantt-day-cell {
@@ -276,6 +330,25 @@ const mainRef = ref<HTMLElement | null>(null)
 
 .gantt-day-cell:hover .cell-add-hint {
   display: flex;
+}
+
+.gantt-stats-header {
+  position: sticky;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  background: #F8F9FA;
+  border-left: 2px solid #e0e1e4;
+}
+
+.gantt-stats-col {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: white;
+  border-left: 2px solid #e0e1e4;
+  display: flex;
+  align-items: center;
 }
 
 /* Cell status classes — background intentionally removed;

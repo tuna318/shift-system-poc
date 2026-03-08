@@ -24,7 +24,11 @@
           </div>
           <p class="text-caption text-medium-emphasis">
             {{ board?.periodStart }} 〜 {{ board?.periodEnd }}
-            ／ {{ shiftStore.entries.length }}件のシフト
+            ／ {{ shiftStore.entries.length }}件 · {{ totalHours }}h ·
+            <span :class="shiftStore.costSummary.variance > 0 ? 'text-error' : ''">
+              ¥{{ shiftStore.costSummary.totalCost.toLocaleString() }}
+            </span>
+            / ¥{{ shiftStore.costSummary.budget.toLocaleString() }}
           </p>
         </div>
       </div>
@@ -267,6 +271,10 @@ const { boards, getEmployee, getCollectionForBoard } = useMockData()
 
 const boardId = computed(() => route.params.id as string)
 const board = computed(() => shiftStore.currentBoard ?? boards.find(b => b.id === boardId.value))
+
+const totalHours = computed(() =>
+  (shiftStore.perEmployeeStats.reduce((sum, e) => sum + e.hours, 0)).toFixed(1)
+)
 
 const collection = computed(() => getCollectionForBoard(boardId.value))
 const collectionPanelOpen = ref<number[]>([])
