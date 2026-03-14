@@ -102,3 +102,44 @@ export interface ShiftPreference {
   employeeId: string
   entries: ShiftPreferenceEntry[]
 }
+
+export type SlotColor =
+  | '#3587dc' | '#4bd08b' | '#f8c076'
+  | '#e879a0' | '#9c7fe0' | '#f97316'
+
+export interface RoleRequirement {
+  role: string
+  count: number
+}
+
+export interface DepartmentConfig {
+  department: string
+  roleRequirements: RoleRequirement[]
+}
+
+export interface ShiftSlot {
+  id: string
+  label: string
+  startTime: string
+  endTime: string
+  color: SlotColor
+  departmentConfigs: DepartmentConfig[]
+}
+
+export interface DaySlotAssignment {
+  date: string
+  slotIds: string[]
+}
+
+export interface AllocationTemplate {
+  id: string
+  name: string
+  isRecurring: boolean
+  slots: ShiftSlot[]
+  assignments: DaySlotAssignment[]
+}
+
+export interface AllocationSetup {
+  slots: ShiftSlot[]
+  assignments: DaySlotAssignment[]
+}

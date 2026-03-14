@@ -240,6 +240,21 @@
             </v-card-text>
           </v-card>
 
+          <!-- Section 5: シフト配置設定 -->
+          <v-card rounded="xl" elevation="0" border class="mb-4">
+            <v-card-text class="pa-5">
+              <div class="d-flex align-center ga-2 mb-4">
+                <v-icon color="primary" size="20">mdi-calendar-clock-outline</v-icon>
+                <span class="text-subtitle-2 font-weight-bold">シフト配置設定</span>
+              </div>
+              <ShiftAllocationCalendar
+                v-model="allocationData"
+                :period-start="form.periodStart"
+                :period-end="form.periodEnd"
+              />
+            </v-card-text>
+          </v-card>
+
         </v-col>
 
         <!-- Right column: summary + budget -->
@@ -306,6 +321,15 @@
                   {{ form.budgetAmount ? `¥${Number(form.budgetAmount).toLocaleString()}` : '未設定' }}
                 </span>
               </div>
+              <v-divider class="my-2" />
+              <div class="summary-row">
+                <span class="text-caption text-medium-emphasis">配置スロット</span>
+                <span class="text-body-2">
+                  {{ allocationSummary.slotCount > 0
+                    ? `${allocationSummary.slotCount}種, 配置済み ${allocationSummary.assignedDays}日`
+                    : '未設定' }}
+                </span>
+              </div>
             </v-card-text>
           </v-card>
 
@@ -352,6 +376,7 @@
 
 <script setup lang="ts">
 import { useMockData } from '~/composables/useMockData'
+import type { AllocationSetup } from '~/types'
 
 const router = useRouter()
 const { employees: allEmployees } = useMockData()
@@ -420,6 +445,14 @@ function toggleEmployee(empId: string) {
   if (idx === -1) selectedEmployeeIds.value.push(empId)
   else selectedEmployeeIds.value.splice(idx, 1)
 }
+
+// ─── Allocation ───────────────────────────────────────────────
+const allocationData = ref<AllocationSetup>({ slots: [], assignments: [] })
+
+const allocationSummary = computed(() => ({
+  slotCount: allocationData.value.slots.length,
+  assignedDays: allocationData.value.assignments.filter(a => a.slotIds.length > 0).length,
+}))
 
 // ─── Form state ──────────────────────────────────────────────
 const formRef = ref()
@@ -491,6 +524,7 @@ async function handleSubmit() {
   // Mock async creation — replace with real API call
   await new Promise(resolve => setTimeout(resolve, 800))
   submitting.value = false
+  console.log('[Allocation Setup]', JSON.stringify(allocationData.value, null, 2))
   successSnackbar.value = true
 }
 
