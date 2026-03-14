@@ -19,6 +19,15 @@
         <p class="text-caption text-medium-emphasis">
           {{ employee.department }} ／ {{ employee.position }} ／ {{ employmentTypeJa(employee.employmentType) }}
         </p>
+        <div v-if="employee.skills.length > 0" class="d-flex flex-wrap ga-1 mt-1">
+          <v-chip
+            v-for="skill in employee.skills"
+            :key="skill"
+            size="x-small"
+            variant="tonal"
+            color="primary"
+          >{{ skill }}</v-chip>
+        </div>
       </div>
       <v-btn variant="tonal" prepend-icon="mdi-pencil-outline" rounded="lg" size="small">
         編集
@@ -78,6 +87,19 @@
                   <div>
                     <div class="text-caption text-medium-emphasis mb-1">PINコード</div>
                     <div class="text-body-1 font-weight-medium">****</div>
+                  </div>
+                  <div>
+                    <div class="text-caption text-medium-emphasis mb-2">スキル</div>
+                    <div v-if="employee.skills.length > 0" class="d-flex flex-wrap ga-1">
+                      <v-chip
+                        v-for="skill in employee.skills"
+                        :key="skill"
+                        size="small"
+                        variant="tonal"
+                        color="primary"
+                      >{{ skill }}</v-chip>
+                    </div>
+                    <span v-else class="text-body-2 text-medium-emphasis">未設定</span>
                   </div>
                 </div>
               </v-col>

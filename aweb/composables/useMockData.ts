@@ -9,23 +9,23 @@ import type {
 // ============================================================
 const employees: Employee[] = [
   // キッチン (5)
-  { id: 'emp-001', name: '山田 太郎', nameKana: 'ヤマダ タロウ', department: 'キッチン', position: 'キッチンリーダー', hourlyWage: 1200, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2022-04-01', pin: '1234' },
-  { id: 'emp-002', name: '鈴木 一郎', nameKana: 'スズキ イチロウ', department: 'キッチン', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-06-15', pin: '2345' },
-  { id: 'emp-003', name: '田中 恵子', nameKana: 'タナカ ケイコ', department: 'キッチン', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-09-01', pin: '3456' },
-  { id: 'emp-004', name: '渡辺 健司', nameKana: 'ワタナベ ケンジ', department: 'キッチン', position: 'クルー', hourlyWage: 1100, employmentType: 'FULL_TIME', status: 'ACTIVE', hireDate: '2021-10-01', pin: '4567' },
-  { id: 'emp-005', name: '伊藤 美咲', nameKana: 'イトウ ミサキ', department: 'キッチン', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-04-01', pin: '5678' },
+  { id: 'emp-001', name: '山田 太郎', nameKana: 'ヤマダ タロウ', department: 'キッチン', position: 'キッチンリーダー', hourlyWage: 1200, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2022-04-01', pin: '1234', skills: ['調理', '発注管理', '開閉店', 'トレーナー', '食品衛生管理者'] },
+  { id: 'emp-002', name: '鈴木 一郎', nameKana: 'スズキ イチロウ', department: 'キッチン', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-06-15', pin: '2345', skills: ['調理'] },
+  { id: 'emp-003', name: '田中 恵子', nameKana: 'タナカ ケイコ', department: 'キッチン', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-09-01', pin: '3456', skills: ['調理', 'ドリンク'] },
+  { id: 'emp-004', name: '渡辺 健司', nameKana: 'ワタナベ ケンジ', department: 'キッチン', position: 'クルー', hourlyWage: 1100, employmentType: 'FULL_TIME', status: 'ACTIVE', hireDate: '2021-10-01', pin: '4567', skills: ['調理', '発注管理', '食品衛生管理者'] },
+  { id: 'emp-005', name: '伊藤 美咲', nameKana: 'イトウ ミサキ', department: 'キッチン', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-04-01', pin: '5678', skills: ['調理'] },
   // ホール (6)
-  { id: 'emp-006', name: '佐藤 花子', nameKana: 'サトウ ハナコ', department: 'ホール', position: 'ホールリーダー', hourlyWage: 1200, employmentType: 'FULL_TIME', status: 'ACTIVE', hireDate: '2020-07-01', pin: '6789' },
-  { id: 'emp-007', name: '高橋 和也', nameKana: 'タカハシ カズヤ', department: 'ホール', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-03-01', pin: '7890' },
-  { id: 'emp-008', name: '中村 さくら', nameKana: 'ナカムラ サクラ', department: 'ホール', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-01-15', pin: '8901' },
-  { id: 'emp-009', name: '小林 正樹', nameKana: 'コバヤシ マサキ', department: 'ホール', position: 'クルー', hourlyWage: 1100, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2022-11-01', pin: '9012' },
-  { id: 'emp-010', name: '加藤 真由', nameKana: 'カトウ マユ', department: 'ホール', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-06-01', pin: '0123' },
-  { id: 'emp-011', name: '吉田 隼人', nameKana: 'ヨシダ ハヤト', department: 'ホール', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'INACTIVE', hireDate: '2023-08-01', pin: '1357' },
+  { id: 'emp-006', name: '佐藤 花子', nameKana: 'サトウ ハナコ', department: 'ホール', position: 'ホールリーダー', hourlyWage: 1200, employmentType: 'FULL_TIME', status: 'ACTIVE', hireDate: '2020-07-01', pin: '6789', skills: ['接客', '開閉店', 'トレーナー', 'レジ操作'] },
+  { id: 'emp-007', name: '高橋 和也', nameKana: 'タカハシ カズヤ', department: 'ホール', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-03-01', pin: '7890', skills: ['接客', 'ドリンク'] },
+  { id: 'emp-008', name: '中村 さくら', nameKana: 'ナカムラ サクラ', department: 'ホール', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-01-15', pin: '8901', skills: ['接客'] },
+  { id: 'emp-009', name: '小林 正樹', nameKana: 'コバヤシ マサキ', department: 'ホール', position: 'クルー', hourlyWage: 1100, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2022-11-01', pin: '9012', skills: ['接客', 'ドリンク', 'レジ操作'] },
+  { id: 'emp-010', name: '加藤 真由', nameKana: 'カトウ マユ', department: 'ホール', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-06-01', pin: '0123', skills: ['接客'] },
+  { id: 'emp-011', name: '吉田 隼人', nameKana: 'ヨシダ ハヤト', department: 'ホール', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'INACTIVE', hireDate: '2023-08-01', pin: '1357', skills: ['接客', 'ドリンク'] },
   // レジ (4)
-  { id: 'emp-012', name: '松本 幸子', nameKana: 'マツモト サチコ', department: 'レジ', position: 'レジリーダー', hourlyWage: 1150, employmentType: 'FULL_TIME', status: 'ACTIVE', hireDate: '2021-04-01', pin: '2468' },
-  { id: 'emp-013', name: '木村 大輔', nameKana: 'キムラ ダイスケ', department: 'レジ', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-10-01', pin: '3579' },
-  { id: 'emp-014', name: '清水 麻衣', nameKana: 'シミズ マイ', department: 'レジ', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-03-01', pin: '4680' },
-  { id: 'emp-015', name: '斎藤 凛', nameKana: 'サイトウ リン', department: 'レジ', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-09-01', pin: '5791' },
+  { id: 'emp-012', name: '松本 幸子', nameKana: 'マツモト サチコ', department: 'レジ', position: 'レジリーダー', hourlyWage: 1150, employmentType: 'FULL_TIME', status: 'ACTIVE', hireDate: '2021-04-01', pin: '2468', skills: ['レジ操作', '売上管理', '開閉店', 'トレーナー'] },
+  { id: 'emp-013', name: '木村 大輔', nameKana: 'キムラ ダイスケ', department: 'レジ', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-10-01', pin: '3579', skills: ['レジ操作'] },
+  { id: 'emp-014', name: '清水 麻衣', nameKana: 'シミズ マイ', department: 'レジ', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-03-01', pin: '4680', skills: ['レジ操作', '接客'] },
+  { id: 'emp-015', name: '斎藤 凛', nameKana: 'サイトウ リン', department: 'レジ', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2024-09-01', pin: '5791', skills: ['レジ操作'] },
 ]
 
 // ============================================================

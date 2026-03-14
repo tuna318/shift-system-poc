@@ -17,6 +17,7 @@ export interface Employee {
   status: 'ACTIVE' | 'INACTIVE'
   hireDate: string
   pin: string
+  skills: string[]
 }
 
 export interface ShiftEntry {

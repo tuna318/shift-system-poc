@@ -69,6 +69,20 @@
         <template #item.hourlyWage="{ item }">
           <span class="text-body-2">¥{{ item.hourlyWage.toLocaleString() }}</span>
         </template>
+        <template #item.skills="{ item }">
+          <div class="d-flex align-center ga-1 flex-wrap py-1">
+            <v-chip
+              v-for="skill in item.skills.slice(0, 2)"
+              :key="skill"
+              size="x-small"
+              variant="tonal"
+              color="primary"
+            >{{ skill }}</v-chip>
+            <v-chip v-if="item.skills.length > 2" size="x-small" variant="tonal" color="default">
+              +{{ item.skills.length - 2 }}
+            </v-chip>
+          </div>
+        </template>
         <template #item.status="{ item }">
           <v-chip :color="item.status === 'ACTIVE' ? 'success' : 'default'" size="x-small" variant="flat">
             {{ item.status === 'ACTIVE' ? '在籍中' : '退職' }}
@@ -107,6 +121,16 @@
               label="雇用形態"
             />
             <v-text-field v-model="newEmp.hourlyWage" type="number" label="時給（円）" prefix="¥" />
+            <v-combobox
+              v-model="newEmp.skills"
+              :items="skillOptions"
+              label="スキル"
+              multiple
+              chips
+              closable-chips
+              hint="選択または入力してカスタムスキルを追加できます"
+              persistent-hint
+            />
           </div>
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
@@ -130,7 +154,9 @@ const search = ref('')
 const deptFilter = ref('全部署')
 const typeFilter = ref('ALL')
 const addDialog = ref(false)
-const newEmp = reactive({ name: '', nameKana: '', department: 'ホール', position: 'クルー', employmentType: 'PART_TIME', hourlyWage: 1050 })
+const newEmp = reactive({ name: '', nameKana: '', department: 'ホール', position: 'クルー', employmentType: 'PART_TIME', hourlyWage: 1050, skills: [] as string[] })
+
+const skillOptions = ['調理', '接客', 'ドリンク', 'レジ操作', '発注管理', '売上管理', '開閉店', 'トレーナー', '食品衛生管理者']
 
 const employmentTypeOptions = [
   { label: '全種別', value: 'ALL' },
@@ -146,6 +172,7 @@ const headers = [
   { title: 'ポジション', key: 'position', sortable: true },
   { title: '雇用形態', key: 'employmentType', sortable: true },
   { title: '時給', key: 'hourlyWage', sortable: true },
+  { title: 'スキル', key: 'skills', sortable: false },
   { title: 'ステータス', key: 'status', sortable: true },
   { title: '', key: 'actions', sortable: false, width: '48px' },
 ]
