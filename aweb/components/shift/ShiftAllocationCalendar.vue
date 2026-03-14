@@ -1,5 +1,5 @@
 <template>
-  <div class="week-cal" @selectstart.prevent>
+  <div class="week-cal" :class="{ 'is-ev-dragging': !!eventDrag }" @selectstart.prevent>
 
     <!-- Week navigation -->
     <div class="d-flex align-center justify-space-between mb-3">
@@ -8,7 +8,7 @@
       </v-btn>
       <div class="text-center">
         <div class="text-body-2 font-weight-bold">{{ weekLabel }}</div>
-        <div class="text-caption text-medium-emphasis">ドラッグしてシフトブロックを作成</div>
+        <div class="text-caption text-medium-emphasis">ドラッグしてシフトブロックを作成・移動</div>
       </div>
       <v-btn icon size="small" variant="text" :disabled="!canGoNext" @click="nextWeek">
         <v-icon>mdi-chevron-right</v-icon>
@@ -38,7 +38,7 @@
 
       <!-- Scrollable time grid -->
       <div ref="scrollRef" class="cal-scroll">
-        <div class="cal-body">
+        <div ref="calBodyRef" class="cal-body">
 
           <!-- Time gutter -->
           <div class="time-gutter" style="position: relative;">
@@ -58,7 +58,12 @@
             v-for="day in weekDays"
             :key="day.date"
             class="day-col"
-            :class="{ 'day-col--out': !day.inPeriod }"
+            :class="{
+              'day-col--out': !day.inPeriod,
+              'day-col--drop-target': eventDrag?.mode === 'move'
+                && eventDrag.previewDate === day.date
+                && eventDrag.previewDate !== eventDrag.fromDate,
+            }"
             :style="{ height: `${TOTAL_HEIGHT}px` }"
             @mousedown.prevent="day.inPeriod ? onColMouseDown($event, day.date) : undefined"
           >
@@ -67,22 +72,18 @@
               <div class="half-line" :style="{ top: `${(h - START_HOUR) * HOUR_PX + HOUR_PX / 2}px` }" />
             </template>
 
-            <!-- Event blocks -->
+            <!-- Existing event blocks -->
             <div
               v-for="ev in getDayEvents(day.date)"
               :key="ev.slot.id"
               class="event-block"
+              :class="{ 'event-block--dragging': eventDrag?.slotId === ev.slot.id }"
               :style="getEventStyle(ev.slot)"
-              @mousedown.stop
-              @click.stop="openEditDialog(ev.slot, day.date)"
+              @mousedown.stop.prevent="onEventMouseDown($event, ev.slot, day.date, 'move')"
             >
-              <button class="event-remove" @click.stop="removeEvent(ev.slot.id, day.date)">×</button>
-
-              <!-- Label + time -->
+              <button class="event-remove" @mousedown.stop @click.stop="removeEvent(ev.slot.id, day.date)">×</button>
               <div class="eb-label">{{ ev.slot.label }}</div>
               <div class="eb-time">{{ ev.slot.startTime }}–{{ ev.slot.endTime }}</div>
-
-              <!-- Dept / role breakdown -->
               <template v-for="dc in ev.slot.departmentConfigs" :key="dc.department">
                 <div v-if="dc.roleRequirements.some(r => r.count > 0)" class="eb-dept-block">
                   <div class="eb-dept-name">{{ dc.department }}</div>
@@ -96,13 +97,28 @@
                   </div>
                 </div>
               </template>
+              <!-- Resize handle (bottom edge) -->
+              <div
+                class="resize-handle"
+                @mousedown.stop.prevent="onEventMouseDown($event, ev.slot, day.date, 'resize')"
+              />
             </div>
 
-            <!-- Drag preview -->
+            <!-- Event drag preview (move / resize) -->
+            <div
+              v-if="eventDrag && eventDrag.previewDate === day.date"
+              class="event-block event-block--ev-preview"
+              :style="getEvDragPreviewStyle()"
+            >
+              <div class="eb-label">{{ getSlotById(eventDrag.slotId)?.label }}</div>
+              <div class="eb-time">{{ eventDrag.previewStartTime }}–{{ eventDrag.previewEndTime }}</div>
+            </div>
+
+            <!-- New-event drag preview -->
             <div
               v-if="drag.active && drag.date === day.date"
               class="event-block event-block--preview"
-              :style="getDragStyle()"
+              :style="getNewDragStyle()"
             >
               <div class="eb-label">{{ drag.startTime }}</div>
               <div class="eb-time">{{ drag.endTime }}</div>
@@ -180,11 +196,7 @@
           <div class="d-flex align-center justify-space-between mb-3">
             <div class="section-label mb-0">部門設定</div>
             <v-btn
-              size="x-small"
-              variant="tonal"
-              color="primary"
-              rounded="lg"
-              prepend-icon="mdi-plus"
+              size="x-small" variant="tonal" color="primary" rounded="lg" prepend-icon="mdi-plus"
               :disabled="form.departmentConfigs.length >= ALL_DEPARTMENTS.length"
               @click="addDepartment"
             >
@@ -196,20 +208,14 @@
             <v-card
               v-for="(dc, idx) in form.departmentConfigs"
               :key="idx"
-              elevation="0"
-              border
-              rounded="lg"
-              class="pa-3"
+              elevation="0" border rounded="lg" class="pa-3"
             >
               <div class="d-flex align-center ga-2 mb-3">
                 <v-select
                   :model-value="dc.department"
                   :items="availableDepts(dc.department)"
                   label="部門"
-                  variant="outlined"
-                  density="compact"
-                  rounded="lg"
-                  hide-details
+                  variant="outlined" density="compact" rounded="lg" hide-details
                   style="flex: 1"
                   @update:model-value="onDeptChange(idx, $event)"
                 />
@@ -221,14 +227,9 @@
                   <v-icon size="16">mdi-close</v-icon>
                 </v-btn>
               </div>
-
               <div class="text-caption text-medium-emphasis mb-2">役割ごとの必要人数</div>
               <div class="d-flex flex-column ga-1">
-                <div
-                  v-for="rr in dc.roleRequirements"
-                  :key="rr.role"
-                  class="role-row"
-                >
+                <div v-for="rr in dc.roleRequirements" :key="rr.role" class="role-row">
                   <span class="role-name text-body-2">{{ rr.role }}</span>
                   <div class="role-stepper">
                     <button class="stepper-btn" :disabled="rr.count <= 0" @click="rr.count = Math.max(0, rr.count - 1)">
@@ -245,8 +246,8 @@
             </v-card>
           </div>
 
-          <!-- ⑤ カラー (bottom) -->
-          <v-divider class="my-4" />
+          <!-- ⑤ カラー -->
+          <v-divider class="mb-4" />
           <div class="section-label">カラー</div>
           <div class="d-flex ga-2">
             <div
@@ -270,9 +271,7 @@
           <v-spacer />
           <v-btn variant="text" @click="cancelDialog">キャンセル</v-btn>
           <v-btn
-            color="primary"
-            variant="flat"
-            rounded="lg"
+            color="primary" variant="flat" rounded="lg"
             :disabled="!form.label || form.departmentConfigs.length === 0"
             @click="saveEvent"
           >
@@ -302,6 +301,7 @@ const END_HOUR = 26
 const HOUR_PX = 64
 const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_PX
 const QUARTER_PX = HOUR_PX / 4
+const GUTTER_W = 52 // px — must match .time-gutter width in CSS
 
 const SLOT_COLORS: SlotColor[] = [
   '#3587dc', '#4bd08b', '#f8c076', '#e879a0', '#9c7fe0', '#f97316',
@@ -331,7 +331,6 @@ const timeOptions = computed(() => {
 
 // ── Employee / role data ──────────────────────────────────────
 const { employees: allEmployees } = useMockData()
-
 function getRolesForDept(dept: string): string[] {
   const roles = new Set<string>()
   ;(allEmployees as Employee[])
@@ -340,7 +339,7 @@ function getRolesForDept(dept: string): string[] {
   return Array.from(roles)
 }
 
-// ── Period helpers (fallback to current month) ────────────────
+// ── Period helpers ────────────────────────────────────────────
 const effectiveStart = computed(() => {
   if (props.periodStart) return props.periodStart
   const d = new Date(); d.setDate(1)
@@ -402,21 +401,31 @@ const canGoNext = computed(() => {
 function prevWeek() { const d = new Date(weekStart.value); d.setDate(d.getDate() - 7); weekStart.value = d }
 function nextWeek() { const d = new Date(weekStart.value); d.setDate(d.getDate() + 7); weekStart.value = d }
 
-// ── Time ↔ Y ─────────────────────────────────────────────────
+// ── Time ↔ pixel / minute helpers ────────────────────────────
 function timeToY(time: string): number {
   const [h, m] = time.split(':').map(Number)
   return ((h - START_HOUR) * 60 + m) * (HOUR_PX / 60)
 }
 function yToTime(y: number): string {
   const snapped = Math.round((y / HOUR_PX) * 4) / 4
-  const totalMin = Math.max(0, Math.min((END_HOUR - START_HOUR) * 60, snapped * 60))
+  const totalMin = clamp(snapped * 60, 0, (END_HOUR - START_HOUR) * 60)
   const hour = Math.floor(totalMin / 60) + START_HOUR
   const min = Math.round(totalMin % 60)
   return `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
+function timeToMin(time: string): number {
+  const [h, m] = time.split(':').map(Number)
+  return (h - START_HOUR) * 60 + m
+}
+function minToTime(minutes: number): string {
+  const h = Math.floor(minutes / 60) + START_HOUR
+  const m = minutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
+function snapMin(minutes: number) { return Math.round(minutes / 15) * 15 }
 
-// ── Calendar events ───────────────────────────────────────────
+// ── Calendar event helpers ────────────────────────────────────
 function getDayEvents(date: string) {
   const a = localAssignments.value.find(x => x.date === date)
   if (!a) return []
@@ -425,11 +434,22 @@ function getDayEvents(date: string) {
     return slot ? [{ slot }] : []
   })
 }
+
 function getEventStyle(slot: ShiftSlot): Record<string, string | number> {
   const top = timeToY(slot.startTime)
   const height = Math.max(timeToY(slot.endTime) - top, QUARTER_PX)
-  return { top: `${top}px`, height: `${height}px`, background: slot.color }
+  const isDragging = eventDrag.value?.slotId === slot.id
+  return {
+    top: `${top}px`,
+    height: `${height}px`,
+    background: slot.color,
+    opacity: isDragging ? 0.3 : 1,
+    cursor: 'grab',
+    zIndex: isDragging ? 0 : 1,
+  }
 }
+
+function getSlotById(id: string) { return localSlots.value.find(s => s.id === id) }
 
 function applySlotToDate(date: string, slotId: string) {
   const existing = localAssignments.value.find(a => a.date === date)
@@ -444,34 +464,172 @@ function removeEvent(slotId: string, date: string) {
     localSlots.value = localSlots.value.filter(s => s.id !== slotId)
 }
 
-// ── Drag to create ────────────────────────────────────────────
+// ── New-event drag (column background drag) ───────────────────
 const scrollRef = ref<HTMLElement>()
+const calBodyRef = ref<HTMLElement>()
 const drag = ref({ active: false, date: '', startY: 0, endY: 0, startTime: '', endTime: '' })
 
 function onColMouseDown(e: MouseEvent, date: string) {
   const scrollEl = scrollRef.value; if (!scrollEl) return
-  const getY = (clientY: number) => {
+  const getScrollY = (clientY: number) => {
     const rect = scrollEl.getBoundingClientRect()
     return clamp(clientY - rect.top + scrollEl.scrollTop, 0, TOTAL_HEIGHT)
   }
-  const startY = getY(e.clientY)
+  const startY = getScrollY(e.clientY)
   const defaultEndY = Math.min(startY + HOUR_PX, TOTAL_HEIGHT)
   drag.value = { active: true, date, startY, endY: defaultEndY, startTime: yToTime(startY), endTime: yToTime(defaultEndY) }
   const onMove = (me: MouseEvent) => {
-    const y = getY(me.clientY)
+    const y = getScrollY(me.clientY)
     if (y > drag.value.startY + QUARTER_PX) { drag.value.endY = y; drag.value.endTime = yToTime(y) }
   }
-  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); openCreateDialog() }
-  document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    openCreateDialog()
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
 }
 
-function getDragStyle(): Record<string, string | number> {
+function getNewDragStyle(): Record<string, string | number> {
   const top = Math.min(drag.value.startY, drag.value.endY)
   const height = Math.max(Math.abs(drag.value.endY - drag.value.startY), QUARTER_PX)
   return { top: `${top}px`, height: `${height}px`, background: form.value.color, opacity: 0.55, border: '2px dashed rgba(255,255,255,0.7)', pointerEvents: 'none', zIndex: 2 }
 }
 
-// ── Department config ─────────────────────────────────────────
+// ── Event drag (move & resize) ────────────────────────────────
+interface EventDragState {
+  slotId: string
+  fromDate: string
+  origStartTime: string
+  origEndTime: string
+  startClientY: number
+  startClientX: number
+  previewDate: string
+  previewStartTime: string
+  previewEndTime: string
+  mode: 'move' | 'resize'
+}
+const eventDrag = ref<EventDragState | null>(null)
+
+/** Resolve which in-period date column the cursor X is over. */
+function dateFromClientX(clientX: number): string | null {
+  const body = calBodyRef.value; if (!body) return null
+  const rect = body.getBoundingClientRect()
+  const relX = clientX - rect.left - GUTTER_W
+  if (relX < 0) return null
+  const colW = (rect.width - GUTTER_W) / 7
+  const idx = Math.floor(relX / colW)
+  const day = weekDays.value[clamp(idx, 0, 6)]
+  return day?.inPeriod ? day.date : null
+}
+
+function onEventMouseDown(e: MouseEvent, slot: ShiftSlot, date: string, mode: 'move' | 'resize') {
+  const scrollEl = scrollRef.value; if (!scrollEl) return
+  const startClientY = e.clientY
+  const startClientX = e.clientX
+  let hasDragged = false
+
+  const getScrollY = (clientY: number) =>
+    clamp(clientY - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop, 0, TOTAL_HEIGHT)
+
+  const onMove = (me: MouseEvent) => {
+    const dxAbs = Math.abs(me.clientX - startClientX)
+    const dyAbs = Math.abs(me.clientY - startClientY)
+    if (!hasDragged && (dxAbs > 4 || dyAbs > 4)) {
+      hasDragged = true
+      eventDrag.value = {
+        slotId: slot.id,
+        fromDate: date,
+        origStartTime: slot.startTime,
+        origEndTime: slot.endTime,
+        startClientY,
+        startClientX,
+        previewDate: date,
+        previewStartTime: slot.startTime,
+        previewEndTime: slot.endTime,
+        mode,
+      }
+    }
+    if (!hasDragged || !eventDrag.value) return
+
+    const MAX_MIN = (END_HOUR - START_HOUR) * 60
+    const rawDelta = ((me.clientY - startClientY) / HOUR_PX) * 60
+    const deltaMin = snapMin(rawDelta)
+
+    if (mode === 'move') {
+      const origStart = timeToMin(slot.startTime)
+      const origEnd = timeToMin(slot.endTime)
+      const dur = origEnd - origStart
+      const newStart = clamp(origStart + deltaMin, 0, MAX_MIN - dur)
+      eventDrag.value.previewStartTime = minToTime(newStart)
+      eventDrag.value.previewEndTime = minToTime(newStart + dur)
+      // Horizontal: detect target date column
+      const targetDate = dateFromClientX(me.clientX)
+      if (targetDate) eventDrag.value.previewDate = targetDate
+    }
+    else {
+      // resize: only vertical, only endTime changes
+      const origEnd = timeToMin(slot.endTime)
+      const origStart = timeToMin(slot.startTime)
+      const newEnd = clamp(origEnd + deltaMin, origStart + 15, MAX_MIN)
+      eventDrag.value.previewEndTime = minToTime(newEnd)
+    }
+  }
+
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    if (hasDragged && eventDrag.value) {
+      commitEventDrag()
+    }
+    else {
+      openEditDialog(slot, date)
+    }
+    eventDrag.value = null
+  }
+
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function commitEventDrag() {
+  const ed = eventDrag.value; if (!ed) return
+  const idx = localSlots.value.findIndex(s => s.id === ed.slotId)
+  if (idx === -1) return
+
+  // Update the slot's times
+  localSlots.value[idx] = {
+    ...localSlots.value[idx],
+    startTime: ed.previewStartTime,
+    endTime: ed.previewEndTime,
+  }
+
+  // If moved to a different date, transfer the assignment
+  if (ed.mode === 'move' && ed.previewDate !== ed.fromDate) {
+    const fromA = localAssignments.value.find(a => a.date === ed.fromDate)
+    if (fromA) fromA.slotIds = fromA.slotIds.filter(id => id !== ed.slotId)
+    applySlotToDate(ed.previewDate, ed.slotId)
+  }
+}
+
+function getEvDragPreviewStyle(): Record<string, string | number> {
+  const ed = eventDrag.value; if (!ed) return {}
+  const top = timeToY(ed.previewStartTime)
+  const height = Math.max(timeToY(ed.previewEndTime) - top, QUARTER_PX)
+  const slot = getSlotById(ed.slotId)
+  return {
+    top: `${top}px`,
+    height: `${height}px`,
+    background: slot?.color ?? '#3587dc',
+    opacity: 0.75,
+    border: '2px solid rgba(255,255,255,0.55)',
+    zIndex: 3,
+    pointerEvents: 'none',
+  }
+}
+
+// ── Department config helpers ─────────────────────────────────
 function availableDepts(currentDept: string): string[] {
   const used = form.value.departmentConfigs.map(dc => dc.department)
   return ALL_DEPARTMENTS.filter(d => d === currentDept || !used.includes(d))
@@ -528,7 +686,9 @@ function openCreateDialog() {
 }
 
 function openEditDialog(slot: ShiftSlot, date: string) {
-  selectedPresetId.value = TIME_PRESETS.find(p => p.startTime === slot.startTime && p.endTime === slot.endTime)?.id ?? null
+  selectedPresetId.value = TIME_PRESETS.find(
+    p => p.startTime === slot.startTime && p.endTime === slot.endTime,
+  )?.id ?? null
   form.value = {
     label: slot.label, startTime: slot.startTime, endTime: slot.endTime, color: slot.color,
     departmentConfigs: slot.departmentConfigs.map(dc => ({
@@ -546,16 +706,13 @@ function cancelDialog() { drag.value.active = false; dialog.value.show = false }
 
 function saveEvent() {
   const slotData: Omit<ShiftSlot, 'id'> = {
-    label: form.value.label,
-    startTime: form.value.startTime,
-    endTime: form.value.endTime,
+    label: form.value.label, startTime: form.value.startTime, endTime: form.value.endTime,
     color: form.value.color,
     departmentConfigs: form.value.departmentConfigs.map(dc => ({
       department: dc.department,
       roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
     })),
   }
-
   if (dialog.value.isEdit) {
     const idx = localSlots.value.findIndex(s => s.id === editingSlotId.value)
     if (idx !== -1) localSlots.value[idx] = { id: editingSlotId.value, ...slotData }
@@ -565,7 +722,6 @@ function saveEvent() {
     localSlots.value.push(newSlot)
     applySlotToDate(editingDate.value, newSlot.id)
   }
-
   drag.value.active = false
   dialog.value.show = false
 }
@@ -587,6 +743,8 @@ onMounted(() => {
 
 <style scoped>
 .week-cal { user-select: none; }
+.is-ev-dragging,
+.is-ev-dragging * { cursor: grabbing !important; }
 
 /* ── Frame ── */
 .cal-frame { border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; overflow: hidden; }
@@ -605,29 +763,56 @@ onMounted(() => {
 /* ── Day columns ── */
 .day-col { flex: 1; position: relative; border-left: 1px solid rgba(0,0,0,0.06); cursor: crosshair; min-width: 80px; }
 .day-col--out { background: rgba(0,0,0,0.018); cursor: default; pointer-events: none; }
+.day-col--drop-target { background: rgba(var(--v-theme-primary), 0.06); }
 .hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid rgba(0,0,0,0.08); pointer-events: none; }
 .half-line { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(0,0,0,0.05); pointer-events: none; }
 
 /* ── Event blocks ── */
-.event-block { position: absolute; left: 3px; right: 3px; border-radius: 6px; overflow: hidden; padding: 5px 7px; cursor: pointer; z-index: 1; transition: filter 0.1s; }
-.event-block:hover { filter: brightness(0.9); }
+.event-block {
+  position: absolute; left: 3px; right: 3px;
+  border-radius: 6px; overflow: visible;
+  padding: 5px 7px 12px; /* bottom pad for resize handle */
+  cursor: grab; z-index: 1; transition: opacity 0.12s, box-shadow 0.12s;
+}
+.event-block:not(.event-block--dragging):not(.event-block--preview):not(.event-block--ev-preview):hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+.event-block--dragging { cursor: grabbing; }
 .event-block--preview { cursor: default; pointer-events: none; }
+.event-block--ev-preview { cursor: grabbing; pointer-events: none; border-radius: 6px; overflow: hidden; }
 
-.event-remove { position: absolute; top: 4px; right: 4px; width: 16px; height: 16px; border-radius: 50%; border: none; background: rgba(0,0,0,0.25); color: white; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; transition: background 0.12s; }
+.event-remove {
+  position: absolute; top: 4px; right: 4px; width: 16px; height: 16px;
+  border-radius: 50%; border: none; background: rgba(0,0,0,0.25); color: white;
+  font-size: 11px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; padding: 0; line-height: 1; transition: background 0.12s;
+}
 .event-remove:hover { background: rgba(0,0,0,0.5); }
 
-/* Label + time */
+/* Event content */
 .eb-label { color: white; font-size: 12px; font-weight: 700; line-height: 1.3; padding-right: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eb-time  { color: rgba(255,255,255,0.75); font-size: 10px; line-height: 1.4; margin-bottom: 4px; }
-
-/* Dept block inside event */
 .eb-dept-block { margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.18); }
 .eb-dept-name { color: rgba(255,255,255,0.6); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
 .eb-role-row { display: flex; align-items: center; justify-content: space-between; line-height: 1.5; }
 .eb-role-name { color: rgba(255,255,255,0.9); font-size: 10px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eb-role-badge { background: rgba(0,0,0,0.22); color: white; font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 4px; flex-shrink: 0; margin-left: 4px; }
 
-/* ── Dialog sections ── */
+/* ── Resize handle ── */
+.resize-handle {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 10px;
+  cursor: ns-resize; display: flex; align-items: center; justify-content: center;
+  border-radius: 0 0 6px 6px;
+  background: rgba(0,0,0,0.15);
+  opacity: 0; transition: opacity 0.15s;
+}
+.resize-handle::after {
+  content: ''; display: block; width: 22px; height: 2px;
+  background: rgba(255,255,255,0.7); border-radius: 1px;
+}
+.event-block:hover .resize-handle { opacity: 1; }
+
+/* ── Dialog ── */
 .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.45); letter-spacing: 0.06em; margin-bottom: 8px; }
 
 /* ── Role stepper ── */
