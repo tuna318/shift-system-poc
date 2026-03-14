@@ -45,16 +45,6 @@
               <div class="overflow-hidden">
                 <div class="text-caption font-weight-medium text-truncate" style="max-width: 130px">{{ emp.name }}</div>
                 <div class="text-caption text-medium-emphasis" style="font-size: 9px">{{ emp.department }}</div>
-                <div v-if="empStats(emp.id)" class="d-flex align-center ga-1 mt-1">
-                  <v-icon v-if="empStats(emp.id)!.isOver" size="10" color="error">mdi-alert</v-icon>
-                  <span
-                    class="text-caption"
-                    style="font-size: 9px"
-                    :class="empStats(emp.id)!.isOver ? 'text-error font-weight-bold' : 'text-medium-emphasis'"
-                  >{{ empStats(emp.id)!.hours }}h</span>
-                  <span class="text-caption text-medium-emphasis" style="font-size: 9px">·</span>
-                  <span class="text-caption text-medium-emphasis" style="font-size: 9px">¥{{ empStats(emp.id)!.cost.toLocaleString() }}</span>
-                </div>
               </div>
             </div>
           </div>
