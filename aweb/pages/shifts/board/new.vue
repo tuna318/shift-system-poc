@@ -131,13 +131,44 @@
                 </div>
               </div>
 
+              <!-- Skill filter -->
+              <div class="mb-4">
+                <div class="d-flex align-center ga-2 mb-2">
+                  <v-icon size="14" color="medium-emphasis">mdi-filter-outline</v-icon>
+                  <span class="text-caption text-medium-emphasis">スキルで絞り込み</span>
+                  <v-btn
+                    v-if="skillFilter"
+                    size="x-small"
+                    variant="text"
+                    color="primary"
+                    @click="skillFilter = null"
+                  >クリア</v-btn>
+                </div>
+                <div class="d-flex flex-wrap ga-1">
+                  <v-chip
+                    v-for="skill in allSkills"
+                    :key="skill"
+                    size="x-small"
+                    :variant="skillFilter === skill ? 'flat' : 'tonal'"
+                    :color="skillFilter === skill ? 'primary' : 'default'"
+                    style="cursor: pointer"
+                    @click="skillFilter = skillFilter === skill ? null : skill"
+                  >{{ skill }}</v-chip>
+                </div>
+              </div>
+
               <div v-if="selectedEmployeeIds.length === 0" class="mb-3">
                 <v-alert type="warning" variant="tonal" density="compact" rounded="lg">
                   対象スタッフを1名以上選択してください
                 </v-alert>
               </div>
 
-              <div v-for="dept in departments" :key="dept.name" class="mb-4">
+              <div
+                v-for="dept in departments"
+                v-show="dept.filteredEmployees.length > 0"
+                :key="dept.name"
+                class="mb-4"
+              >
                 <div class="d-flex align-center justify-space-between mb-2">
                   <div class="d-flex align-center ga-2">
                     <v-checkbox
@@ -148,14 +179,14 @@
                       @update:model-value="toggleDept(dept.name, $event)"
                     />
                     <span class="text-body-2 font-weight-medium">{{ dept.name }}</span>
-                    <v-chip size="x-small" variant="tonal">{{ dept.employees.length }}名</v-chip>
+                    <v-chip size="x-small" variant="tonal">{{ dept.filteredEmployees.length }}名</v-chip>
                   </div>
                 </div>
 
                 <div class="pl-6">
                   <v-row dense>
                     <v-col
-                      v-for="emp in dept.employees"
+                      v-for="emp in dept.filteredEmployees"
                       :key="emp.id"
                       cols="12" sm="6"
                     >
@@ -183,11 +214,21 @@
                         <div class="flex-grow-1 min-width-0">
                           <div class="text-body-2 font-weight-medium text-truncate">{{ emp.name }}</div>
                           <div class="text-caption text-medium-emphasis">{{ emp.position }}</div>
+                          <div v-if="emp.skills.length > 0" class="d-flex flex-wrap ga-1 mt-1">
+                            <v-chip
+                              v-for="skill in emp.skills"
+                              :key="skill"
+                              size="x-small"
+                              :variant="skillFilter === skill ? 'flat' : 'tonal'"
+                              :color="skillFilter === skill ? 'primary' : 'default'"
+                            >{{ skill }}</v-chip>
+                          </div>
                         </div>
                         <v-chip
                           size="x-small"
                           :color="emp.employmentType === 'FULL_TIME' ? 'primary' : 'default'"
                           variant="tonal"
+                          class="align-self-start mt-1"
                         >
                           {{ emp.employmentType === 'FULL_TIME' ? '正社員' : 'パート' }}
                         </v-chip>
@@ -320,12 +361,25 @@ const activeEmployees = computed(() =>
   allEmployees.filter(e => e.status === 'ACTIVE'),
 )
 
+const skillFilter = ref<string | null>(null)
+
+const allSkills = computed(() => {
+  const set = new Set<string>()
+  for (const emp of activeEmployees.value) {
+    for (const skill of emp.skills) set.add(skill)
+  }
+  return Array.from(set).sort()
+})
+
 const departments = computed(() => {
   const deptNames = ['キッチン', 'ホール', 'レジ']
-  return deptNames.map(name => ({
-    name,
-    employees: activeEmployees.value.filter(e => e.department === name),
-  }))
+  return deptNames.map(name => {
+    const all = activeEmployees.value.filter(e => e.department === name)
+    const filtered = skillFilter.value
+      ? all.filter(e => e.skills.includes(skillFilter.value!))
+      : all
+    return { name, filteredEmployees: filtered }
+  })
 })
 
 const selectedEmployeeIds = ref<string[]>(activeEmployees.value.map(e => e.id))
