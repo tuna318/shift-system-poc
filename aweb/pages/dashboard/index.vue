@@ -135,7 +135,6 @@ const stats = computed(() => [
 
 const quickActions = [
   { label: 'シフトボードを編集', to: '/shifts/board/board-2026-03', icon: 'mdi-table-edit', color: 'primary' },
-  { label: 'シフト収集を確認', to: '/shifts/collections', icon: 'mdi-clipboard-list-outline', color: 'primary' },
   { label: '勤怠承認', to: '/attendance/approval', icon: 'mdi-check-circle-outline', color: 'success' },
   { label: '修正申請を確認', to: '/attendance/modifications', icon: 'mdi-pencil-outline', color: 'warning' },
   { label: 'スタッフ一覧', to: '/employees', icon: 'mdi-account-group-outline', color: 'default' },

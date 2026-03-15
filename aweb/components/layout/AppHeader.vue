@@ -129,7 +129,6 @@ const breadcrumbs = computed(() => {
     '/dashboard': 'ダッシュボード',
     '/shifts': 'シフト管理',
     '/shifts/board': 'シフトボード',
-    '/shifts/collections': 'シフト収集',
     '/shifts/substitutions': '代打・交代',
     '/shifts/adjustments': 'シフト調整',
     '/attendance': '勤怠管理',

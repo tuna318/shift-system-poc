@@ -43,6 +43,19 @@
           エクスポート
         </v-btn>
         <v-btn
+          v-if="collection?.status === 'COLLECTING'"
+          variant="tonal"
+          color="warning"
+          prepend-icon="mdi-bell-outline"
+          rounded="lg"
+          @click="sendReminder"
+        >
+          リマインド送信
+          <v-chip size="x-small" color="warning" variant="flat" class="ml-1">
+            {{ pendingCount }}名
+          </v-chip>
+        </v-btn>
+        <v-btn
           v-if="board?.status === 'DRAFT'"
           color="primary"
           prepend-icon="mdi-send-outline"
@@ -63,122 +76,6 @@
         </v-btn>
       </div>
     </div>
-
-    <!-- Collection panel -->
-    <v-expansion-panels v-if="collection" v-model="collectionPanelOpen" class="mb-3" variant="accordion">
-      <v-expansion-panel rounded="lg" elevation="0" style="border: 1px solid rgba(0,0,0,0.12)">
-        <v-expansion-panel-title class="py-2">
-          <div class="d-flex align-center ga-3 flex-grow-1 mr-2">
-            <span class="text-body-2 font-weight-medium">シフト収集状況</span>
-            <v-chip
-              :color="collectionStatusColor(collection.status)"
-              size="x-small"
-              variant="flat"
-            >
-              {{ collectionStatusLabel(collection.status) }}
-            </v-chip>
-            <v-progress-linear
-              :model-value="submissionRate"
-              :color="collection.status === 'CLOSED' ? 'success' : 'primary'"
-              bg-color="surface-variant"
-              rounded
-              height="6"
-              style="max-width: 120px"
-            />
-            <span class="text-caption text-medium-emphasis">
-              {{ collection.submittedCount }}/{{ collection.totalTargets }}名
-            </span>
-          </div>
-        </v-expansion-panel-title>
-        <v-expansion-panel-text>
-          <!-- Stat cards -->
-          <v-row dense class="mb-3">
-            <v-col cols="6" sm="3">
-              <v-card variant="tonal" color="success" rounded="lg">
-                <v-card-text class="pa-3 text-center">
-                  <div class="text-h5 font-weight-bold">{{ collection.submittedCount }}</div>
-                  <div class="text-caption">提出済み</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col cols="6" sm="3">
-              <v-card variant="tonal" color="warning" rounded="lg">
-                <v-card-text class="pa-3 text-center">
-                  <div class="text-h5 font-weight-bold">{{ collection.totalTargets - collection.submittedCount }}</div>
-                  <div class="text-caption">未提出</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col cols="6" sm="3">
-              <v-card variant="tonal" color="primary" rounded="lg">
-                <v-card-text class="pa-3 text-center">
-                  <div class="text-h5 font-weight-bold">{{ collection.totalTargets }}</div>
-                  <div class="text-caption">対象人数</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col cols="6" sm="3">
-              <v-card variant="tonal" color="info" rounded="lg">
-                <v-card-text class="pa-3 text-center">
-                  <div class="text-h5 font-weight-bold">{{ submissionRate }}%</div>
-                  <div class="text-caption">提出率</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-          </v-row>
-
-          <!-- Submission list -->
-          <v-table density="compact" class="mb-3">
-            <thead>
-              <tr>
-                <th>スタッフ</th>
-                <th>ステータス</th>
-                <th>提出日時</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="sub in collection.submissions" :key="sub.employeeId">
-                <td class="text-body-2">{{ getEmployee(sub.employeeId)?.name ?? sub.employeeId }}</td>
-                <td>
-                  <v-chip
-                    :color="sub.submitted ? 'success' : 'default'"
-                    size="x-small"
-                    variant="flat"
-                  >
-                    {{ sub.submitted ? '提出済み' : '未提出' }}
-                  </v-chip>
-                </td>
-                <td class="text-caption text-medium-emphasis">
-                  {{ sub.submittedAt ? formatDateTime(sub.submittedAt) : '—' }}
-                </td>
-              </tr>
-            </tbody>
-          </v-table>
-
-          <!-- Action buttons -->
-          <div v-if="collection.status === 'COLLECTING'" class="d-flex ga-2">
-            <v-btn
-              variant="tonal"
-              color="primary"
-              size="small"
-              prepend-icon="mdi-bell-outline"
-              rounded="lg"
-            >
-              リマインド送信
-            </v-btn>
-            <v-btn
-              variant="tonal"
-              color="warning"
-              size="small"
-              prepend-icon="mdi-close-circle-outline"
-              rounded="lg"
-            >
-              収集を閉じる
-            </v-btn>
-          </div>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-    </v-expansion-panels>
 
     <!-- View toggle -->
     <div class="d-flex align-center justify-space-between mb-3">
@@ -292,11 +189,10 @@
 <script setup lang="ts">
 import { useShiftStore } from '~/stores/shift.store'
 import { useMockData } from '~/composables/useMockData'
-import type { CollectionStatus } from '~/types'
 
 const route = useRoute()
 const shiftStore = useShiftStore()
-const { boards, getEmployee, getCollectionForBoard } = useMockData()
+const { boards, getCollectionForBoard } = useMockData()
 
 const boardId = computed(() => route.params.id as string)
 const board = computed(() => shiftStore.currentBoard ?? boards.find(b => b.id === boardId.value))
@@ -306,36 +202,12 @@ const totalHours = computed(() =>
 )
 
 const collection = computed(() => getCollectionForBoard(boardId.value))
-const collectionPanelOpen = ref<number[]>([])
+const pendingCount = computed(() =>
+  collection.value?.submissions?.filter(s => !s.submitted).length ?? 0
+)
 
-watch(collection, (coll) => {
-  collectionPanelOpen.value = coll?.status === 'COLLECTING' ? [0] : []
-}, { immediate: true })
-
-const submissionRate = computed(() => {
-  const coll = collection.value
-  if (!coll || coll.totalTargets === 0) return 0
-  return Math.round((coll.submittedCount / coll.totalTargets) * 100)
-})
-
-function collectionStatusColor(status: CollectionStatus): string {
-  const map: Record<CollectionStatus, string> = {
-    DRAFT: 'default', SENT: 'info', COLLECTING: 'warning', CLOSED: 'success',
-  }
-  return map[status]
-}
-
-function collectionStatusLabel(status: CollectionStatus): string {
-  const map: Record<CollectionStatus, string> = {
-    DRAFT: 'DRAFT', SENT: '送信済み', COLLECTING: '収集中', CLOSED: '収集完了',
-  }
-  return map[status]
-}
-
-function formatDateTime(isoStr: string): string {
-  return new Date(isoStr).toLocaleDateString('ja-JP', {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
+function sendReminder() {
+  shiftStore.showSnackbar(`未提出の${pendingCount.value}名にリマインドを送信しました`)
 }
 
 // Load board into store on mount

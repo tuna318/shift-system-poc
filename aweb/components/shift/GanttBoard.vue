@@ -38,13 +38,36 @@
         <template v-for="emp in employees" :key="emp.id">
           <!-- Employee name column -->
           <div class="gantt-employee-col gantt-cell gantt-emp-cell">
-            <div class="d-flex align-center ga-2">
-              <v-avatar :color="deptColor(emp.department)" size="26">
+            <div class="d-flex align-center ga-2 w-100">
+              <v-avatar :color="deptColor(emp.department)" size="26" style="flex-shrink:0">
                 <span class="text-white" style="font-size: 10px">{{ emp.name.charAt(0) }}</span>
               </v-avatar>
-              <div class="overflow-hidden">
-                <div class="text-caption font-weight-medium text-truncate" style="max-width: 130px">{{ emp.name }}</div>
+              <div class="overflow-hidden flex-1-1">
+                <div class="text-caption font-weight-medium text-truncate">{{ emp.name }}</div>
                 <div class="text-caption text-medium-emphasis" style="font-size: 9px">{{ emp.department }}</div>
+                <template v-if="collection">
+                  <div class="d-flex align-center ga-1 mt-1">
+                    <span class="sub-badge" :class="submissionFor(emp.id)?.submitted ? 'sub-badge--ok' : 'sub-badge--pending'">
+                      <v-icon :size="9">{{ submissionFor(emp.id)?.submitted ? 'mdi-check' : 'mdi-clock-outline' }}</v-icon>
+                      {{ submissionFor(emp.id)?.submitted ? '提出済み' : '未提出' }}
+                    </span>
+                    <v-tooltip v-if="!submissionFor(emp.id)?.submitted && collection.status === 'COLLECTING'" :text="`${emp.name}にリマインドを送信`" location="right">
+                      <template #activator="{ props: tipProps }">
+                        <v-btn
+                          v-bind="tipProps"
+                          icon
+                          size="x-small"
+                          variant="text"
+                          color="primary"
+                          style="width:18px;height:18px"
+                          @click.stop="sendReminderTo(emp.name)"
+                        >
+                          <v-icon size="12">mdi-bell-outline</v-icon>
+                        </v-btn>
+                      </template>
+                    </v-tooltip>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -133,9 +156,20 @@ const props = defineProps<{
 }>()
 
 const shiftStore = useShiftStore()
-const { employees: allEmployees } = useMockData()
+const { employees: allEmployees, getCollectionForBoard } = useMockData()
 
 const boardStatus = computed(() => shiftStore.currentBoard?.status ?? 'DRAFT')
+
+// Collection data for submission status
+const collection = computed(() => getCollectionForBoard(props.boardId))
+
+function submissionFor(empId: string) {
+  return collection.value?.submissions?.find(s => s.employeeId === empId)
+}
+
+function sendReminderTo(name: string) {
+  shiftStore.showSnackbar(`${name}にリマインドを送信しました`)
+}
 
 const empStatsMap = computed(() => {
   const map = new Map<string, (typeof shiftStore.perEmployeeStats)[0]>()
@@ -281,7 +315,7 @@ const mainRef = ref<HTMLElement | null>(null)
   display: flex;
   align-items: center;
   border-left: 1px solid #e0e1e4;
-  min-height: 64px;
+  min-height: 72px;
 }
 
 .gantt-day-cell {
@@ -333,6 +367,22 @@ const mainRef = ref<HTMLElement | null>(null)
 .cell-multi {
   background-color: #FFFFFF;
 }
+
+/* Submission status badge */
+.sub-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.sub-badge--ok      { background: rgba(22, 163, 74, 0.1);   color: #15803d; }
+.sub-badge--pending { background: rgba(245, 158, 11, 0.12); color: #b45309; }
 
 .gantt-stats-header {
   position: sticky;
