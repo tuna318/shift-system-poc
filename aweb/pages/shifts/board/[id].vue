@@ -77,8 +77,8 @@
       </div>
     </div>
 
-    <!-- View toggle -->
-    <div class="d-flex align-center justify-space-between mb-3">
+    <!-- View toggle + status legend -->
+    <div class="d-flex align-center justify-space-between mb-3 flex-wrap ga-2">
       <v-btn-toggle v-model="activeView" mandatory density="compact" rounded="lg" color="primary">
         <v-btn value="gantt" size="small" prepend-icon="mdi-table">
           シフトボード
@@ -93,48 +93,18 @@
         </v-btn>
       </v-btn-toggle>
 
-      <!-- Department filter (gantt only) -->
-      <div v-if="activeView === 'gantt'" class="d-flex ga-2">
-        <v-chip
-          v-for="dept in departments"
-          :key="dept"
-          :variant="activeDept === dept ? 'flat' : 'tonal'"
-          :color="activeDept === dept ? 'primary' : 'default'"
-          size="small"
-          @click="activeDept = activeDept === dept ? null : dept"
+      <!-- Status legend (always visible) -->
+      <div class="d-flex align-center ga-2 flex-wrap">
+        <div
+          v-for="item in statusLegend"
+          :key="item.status"
+          class="status-legend-chip"
+          :style="{ background: item.color, border: `1.5px solid ${item.borderColor}`, color: item.textColor }"
         >
-          {{ dept }}
-        </v-chip>
+          {{ item.label }}
+        </div>
       </div>
     </div>
-
-    <!-- Status legend (gantt only) -->
-    <v-card v-if="activeView === 'gantt'" variant="outlined" rounded="lg" class="mb-3">
-      <v-card-text class="pa-3">
-        <div class="d-flex align-center ga-1 mb-2">
-          <v-icon size="14" color="medium-emphasis">mdi-information-outline</v-icon>
-          <span class="text-caption font-weight-medium text-medium-emphasis">申請ステータスについて</span>
-        </div>
-        <div class="d-flex flex-wrap ga-x-4 ga-y-2">
-          <div
-            v-for="item in statusLegend"
-            :key="item.status"
-            class="d-flex align-center ga-2 mr-2"
-          >
-            <div
-              class="legend-swatch"
-              :style="{
-                background: item.color,
-                border: `1.5px solid ${item.borderColor}`,
-                color: item.textColor,
-              }"
-            >
-              <span class="legend-swatch-text">{{ item.label }}</span>
-            </div>
-          </div>
-        </div>
-      </v-card-text>
-    </v-card>
 
     <!-- Gantt Board -->
     <GanttBoard
@@ -217,55 +187,12 @@ onMounted(() => {
 
 const activeView = ref<'gantt' | 'allocation'>('gantt')
 
-const departments = ['キッチン', 'ホール', 'レジ']
-const activeDept = ref<string | null>(null)
-
 const statusLegend = [
-  {
-    status: 'SHIFT_REQUESTED',
-    label: 'シフト希望',
-    description: 'スタッフが申請中・マネージャー未承認',
-    color: 'transparent',
-    borderColor: '#3587dc',
-    textColor: '#1d4ed8',
-    outlined: true,
-  },
-  {
-    status: 'CONFIRMED',
-    label: 'シフト確定',
-    description: 'マネージャーが承認済み',
-    color: '#3587dc',
-    borderColor: '#3587dc',
-    textColor: '#ffffff',
-    outlined: false,
-  },
-  {
-    status: 'DAY_OFF_REQUESTED',
-    label: '休み希望',
-    description: 'スタッフが休みを申請中・未承認',
-    color: 'transparent',
-    borderColor: '#64748b',
-    textColor: '#475569',
-    outlined: true,
-  },
-  {
-    status: 'DAY_OFF_CONFIRMED',
-    label: '休み確定',
-    description: '休みとして承認済み',
-    color: '#64748b',
-    borderColor: '#64748b',
-    textColor: '#ffffff',
-    outlined: false,
-  },
-  {
-    status: 'ADJUSTING',
-    label: '調整中',
-    description: '希望内容が合わず要調整',
-    color: '#f59e0b',
-    borderColor: '#d97706',
-    textColor: '#1c1917',
-    outlined: false,
-  },
+  { status: 'SHIFT_REQUESTED',   label: 'シフト希望', color: 'transparent', borderColor: '#3587dc', textColor: '#1d4ed8' },
+  { status: 'CONFIRMED',         label: 'シフト確定', color: '#3587dc',     borderColor: '#3587dc', textColor: '#ffffff' },
+  { status: 'DAY_OFF_REQUESTED', label: '休み希望',   color: 'transparent', borderColor: '#64748b', textColor: '#475569' },
+  { status: 'DAY_OFF_CONFIRMED', label: '休み確定',   color: '#64748b',     borderColor: '#64748b', textColor: '#ffffff' },
+  { status: 'ADJUSTING',         label: '調整中',     color: '#f59e0b',     borderColor: '#d97706', textColor: '#1c1917' },
 ]
 
 const publishDialog = ref(false)
@@ -292,19 +219,13 @@ definePageMeta({
   flex-direction: column;
 }
 
-.legend-swatch {
-  display: flex;
+.status-legend-chip {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 22px;
-  border-radius: 4px;
-  flex-shrink: 0;
-  font-size: 10px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 11px;
   font-weight: 600;
-}
-
-.legend-swatch-text {
   white-space: nowrap;
 }
 </style>
