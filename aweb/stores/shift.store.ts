@@ -87,13 +87,50 @@ export const useShiftStore = defineStore('shift', {
       const entry = this.entries.find(e => e.id === entryId)
       if (entry) {
         entry.cellStatus = status
-        this.showSnackbar('セルステータスを更新しました')
+        this.showSnackbar('ステータスを更新しました')
+      }
+    },
+
+    requestAdjustment(entryId: string, reason: string) {
+      const entry = this.entries.find(e => e.id === entryId)
+      if (entry) {
+        entry.preAdjustStatus = entry.cellStatus
+        entry.cellStatus = 'ADJUSTING'
+        entry.adjustingReason = reason
+        this.showSnackbar('調整依頼を送信しました')
+      }
+    },
+
+    revertToRequested(entryId: string) {
+      const entry = this.entries.find(e => e.id === entryId)
+      if (entry) {
+        const target = entry.preAdjustStatus
+          ?? (entry.cellStatus === 'DAY_OFF_CONFIRMED' ? 'DAY_OFF_REQUESTED' : 'SHIFT_REQUESTED')
+        entry.cellStatus = target
+        entry.adjustingReason = undefined
+        entry.preAdjustStatus = undefined
+        this.showSnackbar('ステータスを希望に戻しました')
+      }
+    },
+
+    finalizeAdjustment(entryId: string, finalStatus: 'CONFIRMED' | 'DAY_OFF_CONFIRMED') {
+      const entry = this.entries.find(e => e.id === entryId)
+      if (entry) {
+        entry.cellStatus = finalStatus
+        entry.adjustingReason = undefined
+        entry.preAdjustStatus = undefined
+        this.showSnackbar('ステータスを確定しました')
       }
     },
 
     addEntry(entry: ShiftEntry) {
       this.entries.push(entry)
       this.showSnackbar('シフトを追加しました')
+    },
+
+    addDirectRequests(newEntries: ShiftEntry[]) {
+      for (const e of newEntries) this.entries.push(e)
+      this.showSnackbar(`${newEntries.length}名にシフト依頼を送信しました`)
     },
 
     updateEntry(entryId: string, changes: Partial<ShiftEntry>) {

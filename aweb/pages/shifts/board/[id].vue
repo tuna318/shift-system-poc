@@ -180,22 +180,39 @@
       </v-expansion-panel>
     </v-expansion-panels>
 
-    <!-- Department filter -->
-    <div class="d-flex ga-2 mb-3">
-      <v-chip
-        v-for="dept in departments"
-        :key="dept"
-        :variant="activeDept === dept ? 'flat' : 'tonal'"
-        :color="activeDept === dept ? 'primary' : 'default'"
-        size="small"
-        @click="activeDept = activeDept === dept ? null : dept"
-      >
-        {{ dept }}
-      </v-chip>
+    <!-- View toggle -->
+    <div class="d-flex align-center justify-space-between mb-3">
+      <v-btn-toggle v-model="activeView" mandatory density="compact" rounded="lg" color="primary">
+        <v-btn value="gantt" size="small" prepend-icon="mdi-table">
+          シフトボード
+        </v-btn>
+        <v-btn
+          value="allocation"
+          size="small"
+          prepend-icon="mdi-calendar-month-outline"
+          :disabled="!board?.allocationSetup"
+        >
+          配置カレンダー
+        </v-btn>
+      </v-btn-toggle>
+
+      <!-- Department filter (gantt only) -->
+      <div v-if="activeView === 'gantt'" class="d-flex ga-2">
+        <v-chip
+          v-for="dept in departments"
+          :key="dept"
+          :variant="activeDept === dept ? 'flat' : 'tonal'"
+          :color="activeDept === dept ? 'primary' : 'default'"
+          size="small"
+          @click="activeDept = activeDept === dept ? null : dept"
+        >
+          {{ dept }}
+        </v-chip>
+      </div>
     </div>
 
-    <!-- Status legend -->
-    <v-card variant="outlined" rounded="lg" class="mb-3">
+    <!-- Status legend (gantt only) -->
+    <v-card v-if="activeView === 'gantt'" variant="outlined" rounded="lg" class="mb-3">
       <v-card-text class="pa-3">
         <div class="d-flex align-center ga-1 mb-2">
           <v-icon size="14" color="medium-emphasis">mdi-information-outline</v-icon>
@@ -224,11 +241,23 @@
 
     <!-- Gantt Board -->
     <GanttBoard
-      v-if="board"
+      v-if="activeView === 'gantt' && board"
       :board-id="board.id"
       :period-start="board.periodStart"
       :period-end="board.periodEnd"
     />
+
+    <!-- Allocation overview calendar -->
+    <v-card v-else-if="activeView === 'allocation' && board?.allocationSetup" rounded="xl" elevation="0" border>
+      <v-card-text class="pa-4">
+        <AllocationOverviewCalendar
+          :period-start="board.periodStart"
+          :period-end="board.periodEnd"
+          :allocation-setup="board.allocationSetup"
+          :entries="shiftStore.entries"
+        />
+      </v-card-text>
+    </v-card>
 
     <!-- Publish confirm dialog -->
     <v-dialog v-model="publishDialog" max-width="400">
@@ -313,6 +342,8 @@ function formatDateTime(isoStr: string): string {
 onMounted(() => {
   shiftStore.loadBoard(boardId.value)
 })
+
+const activeView = ref<'gantt' | 'allocation'>('gantt')
 
 const departments = ['キッチン', 'ホール', 'レジ']
 const activeDept = ref<string | null>(null)

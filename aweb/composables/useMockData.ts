@@ -1,7 +1,8 @@
 import type {
   Employee, ShiftBoard, ShiftEntry, AttendanceRecord, PunchEvent,
   CollectionRequest, CollectionSubmission, ComplianceAlert,
-  ShiftPreference, ShiftPreferenceEntry, CellStatus
+  ShiftPreference, ShiftPreferenceEntry, CellStatus, AdjustingResponseStatus,
+  ShiftSlot, DaySlotAssignment, AllocationSetup,
 } from '~/types'
 
 // ============================================================
@@ -9,7 +10,7 @@ import type {
 // ============================================================
 const employees: Employee[] = [
   // キッチン (5)
-  { id: 'emp-001', name: '山田 太郎', nameKana: 'ヤマダ タロウ', department: 'キッチン', position: 'キッチンリーダー', hourlyWage: 1200, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2022-04-01', pin: '1234', skills: ['調理', '発注管理', '開閉店', 'トレーナー', '食品衛生管理者'] },
+  { id: 'emp-001', name: '山田 太郎', nameKana: 'ヤマダ タロウ', department: 'キッチン', position: 'キッチンリーダー', hourlyWage: 1200, employmentType: 'FULL_TIME', status: 'ACTIVE', hireDate: '2022-04-01', pin: '1234', skills: ['調理', '発注管理', '開閉店', 'トレーナー', '食品衛生管理者'] },
   { id: 'emp-002', name: '鈴木 一郎', nameKana: 'スズキ イチロウ', department: 'キッチン', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-06-15', pin: '2345', skills: ['調理'] },
   { id: 'emp-003', name: '田中 恵子', nameKana: 'タナカ ケイコ', department: 'キッチン', position: 'クルー', hourlyWage: 1050, employmentType: 'PART_TIME', status: 'ACTIVE', hireDate: '2023-09-01', pin: '3456', skills: ['調理', 'ドリンク'] },
   { id: 'emp-004', name: '渡辺 健司', nameKana: 'ワタナベ ケンジ', department: 'キッチン', position: 'クルー', hourlyWage: 1100, employmentType: 'FULL_TIME', status: 'ACTIVE', hireDate: '2021-10-01', pin: '4567', skills: ['調理', '発注管理', '食品衛生管理者'] },
@@ -29,7 +30,7 @@ const employees: Employee[] = [
 ]
 
 // ============================================================
-// SHIFT ENTRIES for March 2026
+// HELPERS
 // ============================================================
 function calcWage(empId: string, start: string, end: string): number {
   const emp = employees.find(e => e.id === empId)
@@ -40,128 +41,203 @@ function calcWage(empId: string, start: string, end: string): number {
   return Math.round(emp.hourlyWage * hours)
 }
 
-const marchEntries: ShiftEntry[] = []
-let entryId = 1
-
-const shiftPatterns = [
-  { start: '10:00', end: '18:00' },
-  { start: '11:00', end: '20:00' },
-  { start: '17:00', end: '22:00' },
-  { start: '09:00', end: '15:00' },
-  { start: '13:00', end: '21:00' },
-  { start: '08:00', end: '16:00' },
-  { start: '15:00', end: '22:00' },
-]
-
-// 0=CONFIRMED, 1=SHIFT_REQUESTED, 2=CONFIRMED, 3=SHIFT_REQUESTED, 4=ADJUSTING, 5=DAY_OFF_CONFIRMED, 6=DAY_OFF_REQUESTED
-const cellStatuses: CellStatus[] = ['CONFIRMED', 'SHIFT_REQUESTED', 'CONFIRMED', 'SHIFT_REQUESTED', 'ADJUSTING', 'DAY_OFF_CONFIRMED', 'DAY_OFF_REQUESTED']
-
-// Generate ~60 shift entries spread across March 2026
-const entryPlan: Array<{ empId: string, day: number, patternIdx: number, statusIdx: number }> = [
-  // emp-001 キッチン山田
-  { empId: 'emp-001', day: 1, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-001', day: 3, patternIdx: 1, statusIdx: 0 },
-  { empId: 'emp-001', day: 5, patternIdx: 2, statusIdx: 0 },
-  { empId: 'emp-001', day: 8, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-001', day: 10, patternIdx: 3, statusIdx: 1 },
-  { empId: 'emp-001', day: 15, patternIdx: 0, statusIdx: 0 },
-  // emp-002 鈴木
-  { empId: 'emp-002', day: 2, patternIdx: 3, statusIdx: 0 },
-  { empId: 'emp-002', day: 6, patternIdx: 2, statusIdx: 0 },
-  { empId: 'emp-002', day: 9, patternIdx: 1, statusIdx: 3 },
-  { empId: 'emp-002', day: 12, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-002', day: 16, patternIdx: 4, statusIdx: 1 },
-  { empId: 'emp-002', day: 20, patternIdx: 2, statusIdx: 0 },
-  // emp-003 田中
-  { empId: 'emp-003', day: 1, patternIdx: 2, statusIdx: 0 },
-  { empId: 'emp-003', day: 4, patternIdx: 3, statusIdx: 0 },
-  { empId: 'emp-003', day: 7, patternIdx: 1, statusIdx: 4 },
-  { empId: 'emp-003', day: 11, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-003', day: 14, patternIdx: 2, statusIdx: 0 },
-  // emp-004 渡辺
-  { empId: 'emp-004', day: 2, patternIdx: 5, statusIdx: 0 },
-  { empId: 'emp-004', day: 5, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-004', day: 9, patternIdx: 1, statusIdx: 0 },
-  { empId: 'emp-004', day: 13, patternIdx: 0, statusIdx: 1 },
-  { empId: 'emp-004', day: 17, patternIdx: 3, statusIdx: 0 },
-  { empId: 'emp-004', day: 21, patternIdx: 2, statusIdx: 0 },
-  // emp-005 伊藤
-  { empId: 'emp-005', day: 3, patternIdx: 6, statusIdx: 3 },
-  { empId: 'emp-005', day: 7, patternIdx: 2, statusIdx: 0 },
-  { empId: 'emp-005', day: 10, patternIdx: 0, statusIdx: 0 },
-  // emp-006 佐藤
-  { empId: 'emp-006', day: 1, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-006', day: 2, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-006', day: 3, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-006', day: 4, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-006', day: 5, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-006', day: 8, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-006', day: 9, patternIdx: 0, statusIdx: 0 },
-  // emp-007 高橋
-  { empId: 'emp-007', day: 4, patternIdx: 2, statusIdx: 0 },
-  { empId: 'emp-007', day: 8, patternIdx: 1, statusIdx: 3 },
-  { empId: 'emp-007', day: 11, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-007', day: 15, patternIdx: 4, statusIdx: 0 },
-  { empId: 'emp-007', day: 18, patternIdx: 2, statusIdx: 1 },
-  // emp-008 中村
-  { empId: 'emp-008', day: 2, patternIdx: 3, statusIdx: 0 },
-  { empId: 'emp-008', day: 6, patternIdx: 2, statusIdx: 0 },
-  { empId: 'emp-008', day: 13, patternIdx: 0, statusIdx: 4 },
-  { empId: 'emp-008', day: 20, patternIdx: 1, statusIdx: 0 },
-  // emp-009 小林
-  { empId: 'emp-009', day: 3, patternIdx: 5, statusIdx: 0 },
-  { empId: 'emp-009', day: 7, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-009', day: 12, patternIdx: 2, statusIdx: 0 },
-  { empId: 'emp-009', day: 16, patternIdx: 3, statusIdx: 1 },
-  { empId: 'emp-009', day: 22, patternIdx: 1, statusIdx: 0 },
-  // emp-010 加藤
-  { empId: 'emp-010', day: 5, patternIdx: 2, statusIdx: 3 },
-  { empId: 'emp-010', day: 9, patternIdx: 1, statusIdx: 0 },
-  { empId: 'emp-010', day: 14, patternIdx: 0, statusIdx: 0 },
-  // emp-012 松本
-  { empId: 'emp-012', day: 1, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-012', day: 4, patternIdx: 1, statusIdx: 0 },
-  { empId: 'emp-012', day: 6, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-012', day: 10, patternIdx: 3, statusIdx: 0 },
-  { empId: 'emp-012', day: 15, patternIdx: 0, statusIdx: 0 },
-  // emp-013 木村
-  { empId: 'emp-013', day: 2, patternIdx: 6, statusIdx: 0 },
-  { empId: 'emp-013', day: 8, patternIdx: 2, statusIdx: 3 },
-  { empId: 'emp-013', day: 12, patternIdx: 0, statusIdx: 0 },
-  { empId: 'emp-013', day: 18, patternIdx: 1, statusIdx: 0 },
-  // emp-014 清水
-  { empId: 'emp-014', day: 3, patternIdx: 3, statusIdx: 0 },
-  { empId: 'emp-014', day: 7, patternIdx: 1, statusIdx: 4 },
-  { empId: 'emp-014', day: 11, patternIdx: 2, statusIdx: 0 },
-  // emp-015 斎藤
-  { empId: 'emp-015', day: 5, patternIdx: 0, statusIdx: 3 },
-  { empId: 'emp-015', day: 10, patternIdx: 2, statusIdx: 0 },
-  { empId: 'emp-015', day: 16, patternIdx: 1, statusIdx: 0 },
-  // Day off requests
-  { empId: 'emp-002', day: 14, patternIdx: 0, statusIdx: 6 },
-  { empId: 'emp-005', day: 12, patternIdx: 0, statusIdx: 6 },
-  { empId: 'emp-007', day: 22, patternIdx: 0, statusIdx: 5 },
-  { empId: 'emp-009', day: 5, patternIdx: 0, statusIdx: 6 },
-  { empId: 'emp-013', day: 20, patternIdx: 0, statusIdx: 5 },
-]
-
-for (const plan of entryPlan) {
-  const emp = employees.find(e => e.id === plan.empId)!
-  const pattern = shiftPatterns[plan.patternIdx % shiftPatterns.length]
-  const dayStr = String(plan.day).padStart(2, '0')
-  const shiftDate = `2026-03-${dayStr}`
-  marchEntries.push({
-    id: `entry-${String(entryId++).padStart(3, '0')}`,
-    employeeId: plan.empId,
-    shiftDate,
-    startTime: pattern.start,
-    endTime: pattern.end,
-    department: emp.department,
-    cellStatus: cellStatuses[plan.statusIdx % cellStatuses.length],
-    estimatedWage: calcWage(plan.empId, pattern.start, pattern.end),
-    note: plan.statusIdx === 4 ? '調整中：希望シフト確認' : plan.statusIdx === 6 ? '休み希望申請中' : undefined,
-  })
+function dStr(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
+
+function monthDays(year: number, month: number): number {
+  return new Date(year, month, 0).getDate()
+}
+
+// ============================================================
+// ALLOCATION SETUP FACTORY
+// ============================================================
+function makeAllocationSetup(prefix: string, year: number, month: number): AllocationSetup {
+  const days = monthDays(year, month)
+  const slots: ShiftSlot[] = [
+    {
+      id: `${prefix}-s1`,
+      label: '朝番',
+      startTime: '07:00',
+      endTime: '15:00',
+      color: '#3587dc',
+      departmentConfigs: [
+        { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'クルー', count: 2 }] },
+      ],
+    },
+    {
+      id: `${prefix}-s2`,
+      label: 'ランチ',
+      startTime: '10:00',
+      endTime: '15:00',
+      color: '#4bd08b',
+      departmentConfigs: [
+        { department: 'ホール', roleRequirements: [{ role: 'ホールリーダー', count: 1 }, { role: 'クルー', count: 3 }] },
+      ],
+    },
+    {
+      id: `${prefix}-s3`,
+      label: '夕番',
+      startTime: '15:00',
+      endTime: '22:00',
+      color: '#f8c076',
+      departmentConfigs: [
+        { department: 'ホール', roleRequirements: [{ role: 'ホールリーダー', count: 1 }, { role: 'クルー', count: 2 }] },
+        { department: 'レジ', roleRequirements: [{ role: 'レジリーダー', count: 1 }, { role: 'クルー', count: 1 }] },
+      ],
+    },
+  ]
+  const assignments: DaySlotAssignment[] = []
+  for (let d = 1; d <= days; d++) {
+    const date = dStr(year, month, d)
+    const dow = new Date(date).getDay()
+    const isWknd = dow === 0 || dow === 6
+    assignments.push({
+      date,
+      slotIds: isWknd ? [`${prefix}-s2`, `${prefix}-s3`] : [`${prefix}-s1`, `${prefix}-s3`],
+    })
+  }
+  return { slots, assignments }
+}
+
+// ============================================================
+// SHIFT ENTRY GENERATION
+// Profile: 'past' = mostly CONFIRMED; 'current' = mixed; 'future' = mostly SHIFT_REQUESTED, sparse
+// ============================================================
+const kitchenCrew = ['emp-002', 'emp-003', 'emp-004', 'emp-005']
+const hallCrew    = ['emp-007', 'emp-008', 'emp-009', 'emp-010']
+const rejiCrew    = ['emp-013', 'emp-014', 'emp-015']
+
+function makeMonthEntries(
+  prefix: string,
+  year: number,
+  month: number,
+  profile: 'past' | 'current' | 'future',
+): ShiftEntry[] {
+  const entries: ShiftEntry[] = []
+  let seq = 1
+  const days = monthDays(year, month)
+
+  function id(): string { return `${prefix}-${String(seq++).padStart(3, '0')}` }
+
+  function status(d: number, i: number = 0): CellStatus {
+    if (profile === 'past') return 'CONFIRMED'
+    if (profile === 'future') return 'SHIFT_REQUESTED'
+    const r = (d * 3 + i) % 10
+    if (r < 6) return 'CONFIRMED'
+    if (r < 8) return 'SHIFT_REQUESTED'
+    return 'ADJUSTING'
+  }
+
+  function entry(empId: string, date: string, s: string, e: string, dept: string, st: CellStatus, note?: string): ShiftEntry {
+    return { id: id(), employeeId: empId, shiftDate: date, startTime: s, endTime: e, department: dept, cellStatus: st, estimatedWage: calcWage(empId, s, e), note }
+  }
+
+  for (let d = 1; d <= days; d++) {
+    // Future boards: sparse — only ~60% of days have entries
+    if (profile === 'future' && (d % 5 === 0 || d % 7 === 3)) continue
+
+    const date = dStr(year, month, d)
+    const dow = new Date(date).getDay()
+    const isWknd = dow === 0 || dow === 6
+    const ci = (d - 1) % 4 // crew index for rotation
+
+    if (!isWknd) {
+      // ── 朝番 07:00-15:00 キッチン ──────────────────────────
+      // Leader always present
+      entries.push(entry('emp-001', date, '07:00', '15:00', 'キッチン', status(d, 0)))
+      // Crew 1 — skip on d≡2 mod 7 (one short day per week)
+      if (d % 7 !== 2) {
+        entries.push(entry(kitchenCrew[ci], date, '07:00', '15:00', 'キッチン', status(d, 1)))
+      }
+      // Crew 2 — skip on d≡1 mod 5
+      if (d % 5 !== 1) {
+        entries.push(entry(kitchenCrew[(ci + 1) % 4], date, '07:00', '15:00', 'キッチン', status(d, 2)))
+      }
+    }
+
+    if (isWknd) {
+      // ── ランチ 10:00-15:00 ホール ───────────────────────────
+      // Required: 1 leader + 3 crew = 4; provide 3-4
+      const lunchSt = status(d, 0)
+      entries.push(entry('emp-006', date, '10:00', '15:00', 'ホール', lunchSt))
+      entries.push(entry(hallCrew[ci % 4], date, '10:00', '15:00', 'ホール', lunchSt))
+      entries.push(entry(hallCrew[(ci + 1) % 4], date, '10:00', '15:00', 'ホール', lunchSt))
+      // 3rd crew — present most weekends (2 out of 3)
+      if (d % 3 !== 0) {
+        entries.push(entry(hallCrew[(ci + 2) % 4], date, '10:00', '15:00', 'ホール', lunchSt))
+      }
+    }
+
+    // ── 夕番 15:00-22:00 ホール + レジ ──────────────────────
+    const eveSt = status(d, 3)
+    // ホール: leader + 2 crew (sometimes 1 crew)
+    entries.push(entry('emp-006', date, '15:00', '22:00', 'ホール', eveSt))
+    entries.push(entry(hallCrew[(ci + 2) % 4], date, '15:00', '22:00', 'ホール', eveSt))
+    if (d % 6 !== 4) {
+      entries.push(entry(hallCrew[(ci + 3) % 4], date, '15:00', '22:00', 'ホール', eveSt))
+    }
+    // レジ: leader + 1 crew (sometimes no crew = understaffed)
+    entries.push(entry('emp-012', date, '15:00', '22:00', 'レジ', eveSt))
+    if (d % 4 !== 3) {
+      entries.push(entry(rejiCrew[ci % 3], date, '15:00', '22:00', 'レジ', eveSt))
+    }
+  }
+
+  // Sprinkle a few day-off entries for realism
+  const dayOffPlan: Array<[string, number]> = [
+    ['emp-002', 8], ['emp-009', 14], ['emp-013', 20], ['emp-007', 25],
+  ]
+  for (const [empId, d] of dayOffPlan) {
+    if (d <= days && !(profile === 'future' && (d % 5 === 0 || d % 7 === 3))) {
+      const st: CellStatus = profile === 'past' ? 'DAY_OFF_CONFIRMED' : 'DAY_OFF_REQUESTED'
+      entries.push({ id: id(), employeeId: empId, shiftDate: dStr(year, month, d), startTime: '10:00', endTime: '18:00', department: employees.find(e => e.id === empId)!.department, cellStatus: st, estimatedWage: 0, note: '休み希望' })
+    }
+  }
+
+  // Add realistic adjusting context for ADJUSTING entries (current profile only)
+  if (profile === 'current') {
+    const adjReasons = [
+      'この日はキッチンの人手が足りていません。出勤していただくことは可能でしょうか？',
+      '急な欠員が出てしまいました。大変申し訳ないのですが、シフトに入っていただけますか？',
+      'ホールの混雑が予想されるため、この日のご出勤をお願いできますか？',
+    ]
+    const adjReplies = [
+      '承知しました。出勤いたします。',
+      '申し訳ありません。その日はどうしても都合がつかない状況です。',
+    ]
+    const responseScenarios: Array<{ responseStatus: AdjustingResponseStatus; reply?: string; preStatus: CellStatus }> = [
+      { responseStatus: 'ACCEPTED', reply: adjReplies[0], preStatus: 'DAY_OFF_REQUESTED' },
+      { responseStatus: 'PENDING', preStatus: 'DAY_OFF_REQUESTED' },
+      { responseStatus: 'REJECTED', reply: adjReplies[1], preStatus: 'SHIFT_REQUESTED' },
+      { responseStatus: 'PENDING', preStatus: 'SHIFT_REQUESTED' },
+    ]
+    let adjIdx = 0
+    for (const e of entries) {
+      if (e.cellStatus === 'ADJUSTING') {
+        const sc = responseScenarios[adjIdx % responseScenarios.length]
+        e.preAdjustStatus = sc.preStatus
+        e.adjustingReason = adjReasons[adjIdx % adjReasons.length]
+        e.adjustingResponseStatus = sc.responseStatus
+        if (sc.reply) e.adjustingResponse = sc.reply
+        adjIdx++
+      }
+    }
+  }
+
+  return entries
+}
+
+// ============================================================
+// GENERATE BOARD DATA
+// ============================================================
+const febAllocation  = makeAllocationSetup('feb26',  2026, 2)
+const marAllocation  = makeAllocationSetup('mar26',  2026, 3)
+const aprAllocation  = makeAllocationSetup('apr26',  2026, 4)
+
+const febEntries = makeMonthEntries('feb26', 2026, 2, 'past')
+const marEntries = makeMonthEntries('mar26', 2026, 3, 'current')
+const aprEntries = makeMonthEntries('apr26', 2026, 4, 'future')
 
 // ============================================================
 // SHIFT BOARDS
@@ -174,9 +250,10 @@ const boards: ShiftBoard[] = [
     periodStart: '2026-04-01',
     periodEnd: '2026-04-30',
     budgetAmount: 820000,
-    entries: [],
+    entries: aprEntries,
     createdAt: '2026-03-05T09:00:00',
     collectionId: 'coll-002',
+    allocationSetup: aprAllocation,
   },
   {
     id: 'board-2026-03',
@@ -185,9 +262,10 @@ const boards: ShiftBoard[] = [
     periodStart: '2026-03-01',
     periodEnd: '2026-03-31',
     budgetAmount: 800000,
-    entries: marchEntries,
+    entries: marEntries,
     createdAt: '2026-02-15T09:00:00',
     collectionId: 'coll-001',
+    allocationSetup: marAllocation,
   },
   {
     id: 'board-2026-02',
@@ -196,36 +274,39 @@ const boards: ShiftBoard[] = [
     periodStart: '2026-02-01',
     periodEnd: '2026-02-28',
     budgetAmount: 750000,
-    entries: [],
+    entries: febEntries,
     createdAt: '2026-01-20T09:00:00',
     collectionId: 'coll-000',
+    allocationSetup: febAllocation,
   },
 ]
 
 // ============================================================
-// SHIFT PREFERENCES (March 2026)
+// SHIFT PREFERENCES — generated for each board month
 // ============================================================
-function makePreferences(): Map<string, ShiftPreference> {
+function makePreferences(year: number, month: number): Map<string, ShiftPreference> {
   const map = new Map<string, ShiftPreference>()
+  const days = monthDays(year, month)
   const activeEmps = employees.filter(e => e.status === 'ACTIVE')
   for (const emp of activeEmps) {
     const entries: ShiftPreferenceEntry[] = []
-    for (let day = 1; day <= 31; day++) {
-      const dayStr = String(day).padStart(2, '0')
-      const date = `2026-03-${dayStr}`
-      const dow = new Date(date).getDay() // 0=Sun, 6=Sat
-      // Weekends mostly unavailable for part-timers, full-timers available
+    for (let d = 1; d <= days; d++) {
+      const date = dStr(year, month, d)
+      const dow = new Date(date).getDay()
       let availability: 'PREFERRED' | 'AVAILABLE' | 'UNAVAILABLE'
       if (emp.employmentType === 'FULL_TIME') {
         availability = (dow === 0 || dow === 6) ? 'AVAILABLE' : 'PREFERRED'
-      } else {
+      }
+      else {
         if (dow === 0) {
           availability = 'UNAVAILABLE'
-        } else if (dow === 6) {
-          availability = day % 3 === 0 ? 'AVAILABLE' : 'UNAVAILABLE'
-        } else {
-          const rand = (parseInt(emp.id.slice(-3)) + day) % 5
-          availability = rand === 0 ? 'UNAVAILABLE' : rand <= 2 ? 'PREFERRED' : 'AVAILABLE'
+        }
+        else if (dow === 6) {
+          availability = d % 3 === 0 ? 'AVAILABLE' : 'UNAVAILABLE'
+        }
+        else {
+          const r = (parseInt(emp.id.slice(-3)) + d) % 5
+          availability = r === 0 ? 'UNAVAILABLE' : r <= 2 ? 'PREFERRED' : 'AVAILABLE'
         }
       }
       entries.push({ date, availability })
@@ -234,20 +315,30 @@ function makePreferences(): Map<string, ShiftPreference> {
   }
   return map
 }
-const preferencesMap = makePreferences()
+
+const febPreferences = makePreferences(2026, 2)
+const marPreferences = makePreferences(2026, 3)
+const aprPreferences = makePreferences(2026, 4)
+
+// Keyed by boardId for easy lookup
+const preferencesByBoard: Record<string, Map<string, ShiftPreference>> = {
+  'board-2026-02': febPreferences,
+  'board-2026-03': marPreferences,
+  'board-2026-04': aprPreferences,
+}
 
 // ============================================================
-// ATTENDANCE RECORDS (Last 7 days)
+// ATTENDANCE RECORDS (Last 7 days of current date 2026-03-15)
 // ============================================================
 function makeAttendanceRecords(): AttendanceRecord[] {
   const records: AttendanceRecord[] = []
-  const today = new Date('2026-03-01')
+  const base = new Date('2026-03-15')
   let recId = 1
   let punchId = 1
 
   for (let d = 6; d >= 0; d--) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - d)
+    const date = new Date(base)
+    date.setDate(base.getDate() - d)
     const workDate = date.toISOString().split('T')[0]
 
     const activeEmps = employees.filter(e => e.status === 'ACTIVE').slice(0, 12)
@@ -258,8 +349,7 @@ function makeAttendanceRecords(): AttendanceRecord[] {
       const checkInMin = (parseInt(emp.id.slice(-2)) % 3) * 15
       const checkInTime = `${String(checkInHour).padStart(2, '0')}:${String(checkInMin).padStart(2, '0')}`
       const workHours = 7 + (parseInt(emp.id.slice(-1)) % 3)
-      const checkOutHour = checkInHour + workHours
-      const checkOutTime = `${String(checkOutHour).padStart(2, '0')}:${String(checkInMin).padStart(2, '0')}`
+      const checkOutTime = `${String(checkInHour + workHours).padStart(2, '0')}:${String(checkInMin).padStart(2, '0')}`
       const breakMinutes = 45
       const actualMinutes = workHours * 60 - breakMinutes
       const overtimeMinutes = actualMinutes > 480 ? actualMinutes - 480 : 0
@@ -269,41 +359,23 @@ function makeAttendanceRecords(): AttendanceRecord[] {
       if (isToday) {
         const todayStatuses = ['WORKING', 'WORKING', 'WORKING', 'ON_BREAK', 'NOT_STARTED'] as const
         status = todayStatuses[parseInt(emp.id.slice(-1)) % 5]
-      } else if (d === 1) {
+      }
+      else if (d === 1) {
         status = 'COMPLETED'
-      } else {
+      }
+      else {
         status = parseInt(emp.id.slice(-1)) % 3 === 0 ? 'APPROVED' : 'COMPLETED'
       }
 
       const punchEvents: PunchEvent[] = []
       if (status !== 'NOT_STARTED') {
-        punchEvents.push({
-          id: `punch-${punchId++}`,
-          punchType: 'CHECK_IN',
-          punchedAt: `${workDate}T${checkInTime}:00`,
-          isVoided: false,
-        })
+        punchEvents.push({ id: `punch-${punchId++}`, punchType: 'CHECK_IN', punchedAt: `${workDate}T${checkInTime}:00`, isVoided: false })
         if (status === 'ON_BREAK' || status === 'COMPLETED' || status === 'APPROVED') {
-          const breakStartHour = checkInHour + 3
-          punchEvents.push({
-            id: `punch-${punchId++}`,
-            punchType: 'BREAK_START',
-            punchedAt: `${workDate}T${String(breakStartHour).padStart(2, '0')}:00:00`,
-            isVoided: false,
-          })
+          const bh = checkInHour + 3
+          punchEvents.push({ id: `punch-${punchId++}`, punchType: 'BREAK_START', punchedAt: `${workDate}T${String(bh).padStart(2, '0')}:00:00`, isVoided: false })
           if (status === 'COMPLETED' || status === 'APPROVED') {
-            punchEvents.push({
-              id: `punch-${punchId++}`,
-              punchType: 'BREAK_END',
-              punchedAt: `${workDate}T${String(breakStartHour).padStart(2, '0')}:45:00`,
-              isVoided: false,
-            })
-            punchEvents.push({
-              id: `punch-${punchId++}`,
-              punchType: 'CHECK_OUT',
-              punchedAt: `${workDate}T${checkOutTime}:00`,
-              isVoided: false,
-            })
+            punchEvents.push({ id: `punch-${punchId++}`, punchType: 'BREAK_END', punchedAt: `${workDate}T${String(bh).padStart(2, '0')}:45:00`, isVoided: false })
+            punchEvents.push({ id: `punch-${punchId++}`, punchType: 'CHECK_OUT', punchedAt: `${workDate}T${checkOutTime}:00`, isVoided: false })
           }
         }
       }
@@ -342,11 +414,7 @@ const collections: CollectionRequest[] = [
     deadline: '2026-01-20',
     totalTargets: 14,
     submittedCount: 14,
-    submissions: allEmpIds.slice(0, 14).map(id => ({
-      employeeId: id,
-      submitted: true,
-      submittedAt: '2026-01-18T10:00:00',
-    })),
+    submissions: allEmpIds.slice(0, 14).map(id => ({ employeeId: id, submitted: true, submittedAt: '2026-01-18T10:00:00' })),
   },
   {
     id: 'coll-001',
@@ -357,11 +425,7 @@ const collections: CollectionRequest[] = [
     deadline: '2026-02-20',
     totalTargets: 14,
     submittedCount: 14,
-    submissions: allEmpIds.slice(0, 14).map(id => ({
-      employeeId: id,
-      submitted: true,
-      submittedAt: '2026-02-18T10:00:00',
-    })),
+    submissions: allEmpIds.slice(0, 14).map(id => ({ employeeId: id, submitted: true, submittedAt: '2026-02-18T10:00:00' })),
   },
   {
     id: 'coll-002',
@@ -372,11 +436,7 @@ const collections: CollectionRequest[] = [
     deadline: '2026-03-20',
     totalTargets: 14,
     submittedCount: 8,
-    submissions: allEmpIds.slice(0, 14).map((id, i) => ({
-      employeeId: id,
-      submitted: i < 8,
-      submittedAt: i < 8 ? '2026-03-10T10:00:00' : undefined,
-    })),
+    submissions: allEmpIds.slice(0, 14).map((id, i) => ({ employeeId: id, submitted: i < 8, submittedAt: i < 8 ? '2026-03-10T10:00:00' : undefined })),
   },
   {
     id: 'coll-003',
@@ -387,10 +447,7 @@ const collections: CollectionRequest[] = [
     deadline: '2026-04-20',
     totalTargets: 14,
     submittedCount: 0,
-    submissions: allEmpIds.slice(0, 14).map(id => ({
-      employeeId: id,
-      submitted: false,
-    })),
+    submissions: allEmpIds.slice(0, 14).map(id => ({ employeeId: id, submitted: false })),
   },
 ]
 
@@ -398,30 +455,9 @@ const collections: CollectionRequest[] = [
 // COMPLIANCE ALERTS
 // ============================================================
 const alerts: ComplianceAlert[] = [
-  {
-    id: 'alert-001',
-    employeeId: 'emp-004',
-    type: 'OVERTIME_WARNING',
-    level: 'warning',
-    message: '渡辺 健司：今月の残業時間が35時間に達しました（上限45時間）',
-    createdAt: '2026-02-28T09:00:00',
-  },
-  {
-    id: 'alert-002',
-    employeeId: 'emp-006',
-    type: 'CONSECUTIVE_DAYS',
-    level: 'warning',
-    message: '佐藤 花子：6日連続勤務が予定されています（法定上限：6日）',
-    createdAt: '2026-02-28T09:30:00',
-  },
-  {
-    id: 'alert-003',
-    employeeId: 'emp-012',
-    type: 'OVERTIME_CRITICAL',
-    level: 'critical',
-    message: '松本 幸子：今月の時間外労働が42時間に達しました（上限45時間・要注意）',
-    createdAt: '2026-03-01T08:00:00',
-  },
+  { id: 'alert-001', employeeId: 'emp-004', type: 'OVERTIME_WARNING', level: 'warning', message: '渡辺 健司：今月の残業時間が35時間に達しました（上限45時間）', createdAt: '2026-02-28T09:00:00' },
+  { id: 'alert-002', employeeId: 'emp-006', type: 'CONSECUTIVE_DAYS', level: 'warning', message: '佐藤 花子：6日連続勤務が予定されています（法定上限：6日）', createdAt: '2026-02-28T09:30:00' },
+  { id: 'alert-003', employeeId: 'emp-012', type: 'OVERTIME_CRITICAL', level: 'critical', message: '松本 幸子：今月の時間外労働が42時間に達しました（上限45時間・要注意）', createdAt: '2026-03-01T08:00:00' },
 ]
 
 // ============================================================
@@ -444,9 +480,13 @@ function getEntriesForDate(boardId: string, date: string): ShiftEntry[] {
 }
 
 function getPreference(empId: string, date: string): ShiftPreferenceEntry | undefined {
-  const pref = preferencesMap.get(empId)
-  if (!pref) return undefined
-  return pref.entries.find(e => e.date === date)
+  // Find which board/month this date belongs to
+  for (const prefs of Object.values(preferencesByBoard)) {
+    const pref = prefs.get(empId)
+    const entry = pref?.entries.find(e => e.date === date)
+    if (entry) return entry
+  }
+  return undefined
 }
 
 function getCostSummary(boardId: string): {
@@ -464,10 +504,7 @@ function getCostSummary(boardId: string): {
     const [eh, em] = entry.endTime.split(':').map(Number)
     const hours = (eh * 60 + em - (sh * 60 + sm)) / 60
     const existing = empMap.get(entry.employeeId) ?? { hours: 0, cost: 0 }
-    empMap.set(entry.employeeId, {
-      hours: existing.hours + hours,
-      cost: existing.cost + entry.estimatedWage,
-    })
+    empMap.set(entry.employeeId, { hours: existing.hours + hours, cost: existing.cost + entry.estimatedWage })
   }
 
   const perEmployee = Array.from(empMap.entries()).map(([empId, data]) => ({
@@ -477,12 +514,7 @@ function getCostSummary(boardId: string): {
   })).filter(e => e.employee)
 
   const totalCost = perEmployee.reduce((sum, e) => sum + e.cost, 0)
-  return {
-    totalCost,
-    budget: board.budgetAmount,
-    variance: totalCost - board.budgetAmount,
-    perEmployee,
-  }
+  return { totalCost, budget: board.budgetAmount, variance: totalCost - board.budgetAmount, perEmployee }
 }
 
 // ============================================================
@@ -496,7 +528,8 @@ export function useMockData() {
     collections,
     attendanceRecords,
     alerts,
-    preferences: preferencesMap,
+    preferences: marPreferences,
+    preferencesByBoard,
     getEmployee,
     getEntriesForDate,
     getPreference,

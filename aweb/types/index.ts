@@ -1,3 +1,5 @@
+export type AdjustingResponseStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED'
+
 export type AttendanceStatus = 'NOT_STARTED' | 'WORKING' | 'ON_BREAK' | 'COMPLETED' | 'APPROVED'
 export type PunchType = 'CHECK_IN' | 'BREAK_START' | 'BREAK_END' | 'CHECK_OUT'
 export type CellStatus = 'SHIFT_REQUESTED' | 'CONFIRMED' | 'DAY_OFF_REQUESTED' | 'DAY_OFF_CONFIRMED' | 'ADJUSTING'
@@ -30,6 +32,11 @@ export interface ShiftEntry {
   cellStatus: CellStatus
   estimatedWage: number
   note?: string
+  adjustingReason?: string         // manager's message to employee
+  adjustingResponse?: string       // employee's reply
+  adjustingResponseStatus?: AdjustingResponseStatus  // employee's response state
+  preAdjustStatus?: CellStatus     // status before ADJUSTING, for revert
+  managerRequested?: boolean       // true when manager initiated the request (not employee)
 }
 
 export interface ShiftPreferenceEntry {
@@ -49,6 +56,7 @@ export interface ShiftBoard {
   entries: ShiftEntry[]
   createdAt: string
   collectionId?: string
+  allocationSetup?: AllocationSetup
 }
 
 export interface AttendanceRecord {
