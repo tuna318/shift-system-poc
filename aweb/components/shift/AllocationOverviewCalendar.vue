@@ -1,68 +1,17 @@
 <template>
   <div class="alloc-cal" @selectstart.prevent>
 
-    <!-- View toggle + week nav -->
-    <div class="d-flex align-center justify-space-between mb-3">
-      <v-btn-toggle v-model="view" mandatory density="compact" rounded="lg" color="primary">
-        <v-btn value="month" size="small">月表示</v-btn>
-        <v-btn value="week" size="small">週表示</v-btn>
-      </v-btn-toggle>
-      <div v-if="view === 'week'" class="d-flex align-center ga-1">
+    <!-- Week nav -->
+    <div class="d-flex justify-end mb-3">
+      <div class="d-flex align-center ga-1">
         <v-btn icon size="small" variant="text" :disabled="!canGoPrev" @click="prevWeek"><v-icon>mdi-chevron-left</v-icon></v-btn>
         <span class="text-body-2 font-weight-medium" style="min-width:140px;text-align:center">{{ weekLabel }}</span>
         <v-btn icon size="small" variant="text" :disabled="!canGoNext" @click="nextWeek"><v-icon>mdi-chevron-right</v-icon></v-btn>
       </div>
     </div>
 
-    <!-- ═══ MONTHLY VIEW ══════════════════════════════════════ -->
-    <template v-if="view === 'month'">
-      <div class="d-flex flex-wrap align-center ga-4 mb-4">
-        <div class="d-flex align-center ga-3">
-          <span class="text-caption text-medium-emphasis font-weight-medium">スロット</span>
-          <div v-for="slot in allocationSetup.slots" :key="slot.id" class="d-flex align-center ga-1">
-            <span class="slot-dot" :style="{ background: slot.color }" />
-            <span class="text-caption">{{ slot.label }}</span>
-          </div>
-        </div>
-        <v-divider vertical style="height:16px" />
-        <div class="d-flex align-center ga-3">
-          <span class="text-caption text-medium-emphasis font-weight-medium">充足率（確定のみ）</span>
-          <span class="cov-badge cov-ok text-caption">充足</span>
-          <span class="cov-badge cov-short text-caption">不足</span>
-          <span class="cov-badge cov-none text-caption">未配置</span>
-        </div>
-      </div>
-
-      <div class="dow-header">
-        <div v-for="(label, i) in DOW_LABELS" :key="label" class="dow-cell text-caption font-weight-medium" :class="i === 0 || i === 6 ? 'text-error' : 'text-medium-emphasis'">{{ label }}</div>
-      </div>
-
-      <template v-for="(week, wi) in weeks" :key="wi">
-        <div v-if="monthLabel(week)" class="month-divider">
-          <span class="text-caption font-weight-bold text-medium-emphasis">{{ monthLabel(week) }}</span>
-        </div>
-        <div class="cal-week">
-          <div v-for="day in week" :key="day.date" class="cal-day" :class="{ 'cal-day--out': !day.inPeriod, 'cal-day--weekend': day.isWeekend && day.inPeriod, 'cal-day--today': day.isToday }">
-            <div class="date-num text-caption font-weight-bold" :class="{ 'text-error': day.isWeekend && day.inPeriod, 'date-num--today': day.isToday, 'text-disabled': !day.inPeriod }">{{ day.dayNum }}</div>
-            <template v-if="day.inPeriod">
-              <div class="day-slots">
-                <div v-for="slot in getDaySlots(day.date)" :key="slot.id" class="slot-row">
-                  <span class="slot-dot" :style="{ background: slot.color }" />
-                  <span class="slot-name">{{ slot.label }}</span>
-                  <span class="slot-time">{{ slot.startTime }}–{{ slot.endTime }}</span>
-                  <span class="slot-cov" :class="covClass(day.date, slot)">{{ covText(day.date, slot) }}</span>
-                </div>
-                <div v-if="getDaySlots(day.date).length === 0" class="no-slot-row"><span class="text-disabled" style="font-size:10px">配置なし</span></div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </template>
-    </template>
-
     <!-- ═══ WEEKLY VIEW ═══════════════════════════════════════ -->
-    <template v-else>
-      <div class="cal-frame">
+    <div class="cal-frame">
         <div class="cal-header">
           <div class="time-gutter" />
           <div v-for="(day, i) in weekDays" :key="day.date" class="day-header-cell" :class="{ 'day-header-cell--out': !day.inPeriod, 'day-header-cell--today': day.isToday }">
@@ -97,7 +46,7 @@
                         </div>
                       </div>
                       <div v-for="emp in dept.topEmployees" :key="emp.entry.id" class="sb-emp-row">
-                        <span class="sb-emp-icon" :class="`icon-${emp.entry.cellStatus}`">{{ statusIcon(emp.entry.cellStatus) }}</span>
+                        <v-icon :size="11" :color="statusIconColor(emp.entry.cellStatus)">{{ statusIcon(emp.entry.cellStatus) }}</v-icon>
                         <span class="sb-emp-name">{{ emp.name }}</span>
                       </div>
                       <div v-if="dept.hiddenCount > 0" class="sb-more">+{{ dept.hiddenCount }}名</div>
@@ -110,7 +59,6 @@
           </div>
         </div>
       </div>
-    </template>
 
     <!-- ═══ DETAIL DIALOG ════════════════════════════════════ -->
     <v-dialog v-model="detailDialog.show" max-width="600" scrollable>
@@ -411,11 +359,28 @@ const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 const todayStr = '2026-03-15'
 const MAX_COMPACT = 3
 
-const view = ref<'month' | 'week'>('month')
 
 // ─── Status display ───────────────────────────────────────────
 function statusIcon(s: CellStatus): string {
-  return { CONFIRMED: '✓', SHIFT_REQUESTED: '→', DAY_OFF_REQUESTED: '✕', DAY_OFF_CONFIRMED: '✕', ADJUSTING: '⚠' }[s] ?? '?'
+  const map: Record<CellStatus, string> = {
+    CONFIRMED:         'mdi-check-circle',
+    SHIFT_REQUESTED:   'mdi-clock-outline',
+    DAY_OFF_REQUESTED: 'mdi-moon-waning-crescent',
+    DAY_OFF_CONFIRMED: 'mdi-moon-waning-crescent',
+    ADJUSTING:         'mdi-alert-circle-outline',
+  }
+  return map[s] ?? 'mdi-circle-outline'
+}
+
+function statusIconColor(s: CellStatus): string {
+  const map: Record<CellStatus, string> = {
+    CONFIRMED:         '#a7f3d0',
+    SHIFT_REQUESTED:   'rgba(255,255,255,0.8)',
+    DAY_OFF_REQUESTED: 'rgba(255,255,255,0.5)',
+    DAY_OFF_CONFIRMED: 'rgba(255,255,255,0.5)',
+    ADJUSTING:         '#fde68a',
+  }
+  return map[s] ?? 'rgba(255,255,255,0.5)'
 }
 
 function responseIcon(s?: AdjustingResponseStatus): string {
@@ -644,35 +609,7 @@ function submitDirectRequest(dept: string, role: string, date: string, slot: Shi
   else clearState()
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Monthly
-// ═══════════════════════════════════════════════════════════════
 function sundayOf(d: Date): Date { const r = new Date(d); r.setDate(r.getDate() - r.getDay()); return r }
-
-const weeks = computed(() => {
-  const pStart = new Date(props.periodStart), pEnd = new Date(props.periodEnd)
-  const calStart = sundayOf(new Date(props.periodStart))
-  const calEnd = (() => { const e = new Date(props.periodEnd); const s = new Date(e); s.setDate(e.getDate() + (6 - e.getDay())); return s })()
-  const result: Array<Array<{ date: string; dayNum: number; month: number; isWeekend: boolean; isToday: boolean; inPeriod: boolean }>> = []
-  const cursor = new Date(calStart)
-  while (cursor <= calEnd) {
-    const week = []
-    for (let i = 0; i < 7; i++) {
-      const dow = cursor.getDay(); const dateStr = cursor.toISOString().slice(0, 10)
-      week.push({ date: dateStr, dayNum: cursor.getDate(), month: cursor.getMonth() + 1, isWeekend: dow === 0 || dow === 6, isToday: dateStr === todayStr, inPeriod: cursor >= pStart && cursor <= pEnd })
-      cursor.setDate(cursor.getDate() + 1)
-    }
-    result.push(week)
-  }
-  return result
-})
-
-function monthLabel(week: typeof weeks.value[0]): string | null {
-  const first = week.find(d => d.inPeriod && d.dayNum === 1)
-  if (first) return `${first.date.slice(0, 4)}年${first.month}月`
-  if (weeks.value.indexOf(week) === 0) { const ip = week.find(d => d.inPeriod); if (ip) return `${ip.date.slice(0, 4)}年${ip.month}月` }
-  return null
-}
 
 // ═══════════════════════════════════════════════════════════════
 // Weekly
@@ -739,30 +676,6 @@ export const StatusChip = defineComponent({
 <style scoped>
 .alloc-cal { font-size: 12px; }
 
-/* ── Monthly ──────────────────────────────────────────── */
-.dow-header { display:grid; grid-template-columns:repeat(7,1fr); border-top:1px solid rgba(0,0,0,.08); border-left:1px solid rgba(0,0,0,.08); }
-.dow-cell { text-align:center; padding:6px 4px; border-right:1px solid rgba(0,0,0,.08); border-bottom:1px solid rgba(0,0,0,.08); background:#f8f9fa; }
-.month-divider { padding:6px 8px 2px; border-left:1px solid rgba(0,0,0,.08); border-right:1px solid rgba(0,0,0,.08); background:rgba(var(--v-theme-primary),.04); }
-.cal-week { display:grid; grid-template-columns:repeat(7,1fr); border-left:1px solid rgba(0,0,0,.08); }
-.cal-day { border-right:1px solid rgba(0,0,0,.08); border-bottom:1px solid rgba(0,0,0,.08); min-height:80px; padding:4px 5px; display:flex; flex-direction:column; gap:2px; background:white; box-sizing:border-box; }
-.cal-day--out { background:#f9f9f9; pointer-events:none; }
-.cal-day--weekend { background:rgba(230,39,62,.025); }
-.cal-day--today { outline:2px solid rgb(var(--v-theme-primary)); outline-offset:-2px; }
-.date-num { font-size:11px; line-height:1; margin-bottom:3px; }
-.date-num--today { color:rgb(var(--v-theme-primary)) !important; font-weight:800 !important; }
-.day-slots { display:flex; flex-direction:column; gap:2px; flex:1; }
-.slot-row { display:flex; align-items:center; gap:3px; line-height:1.2; }
-.slot-dot { width:7px; height:7px; border-radius:2px; flex-shrink:0; }
-.slot-name { font-size:10px; font-weight:600; white-space:nowrap; }
-.slot-time { font-size:9px; color:rgba(0,0,0,.45); flex:1; white-space:nowrap; overflow:hidden; }
-.slot-cov { font-size:10px; font-weight:600; white-space:nowrap; flex-shrink:0; }
-.slot-cov.cov-ok { color:#16a34a; } .slot-cov.cov-short { color:#d97706; } .slot-cov.cov-none { color:rgba(0,0,0,.35); }
-.no-slot-row { flex:1; display:flex; align-items:center; }
-.cov-badge { font-size:10px; padding:1px 5px; border-radius:4px; font-weight:600; }
-.cov-badge.cov-ok { color:#16a34a; background:rgba(22,163,74,.1); }
-.cov-badge.cov-short { color:#d97706; background:rgba(217,119,6,.1); }
-.cov-badge.cov-none { color:rgba(0,0,0,.4); background:rgba(0,0,0,.06); }
-
 /* ── Weekly frame ────────────────────────────────────── */
 .cal-frame { border:1px solid rgba(0,0,0,.12); border-radius:10px; overflow:hidden; }
 .cal-header { display:flex; border-bottom:1px solid rgba(0,0,0,.1); background:rgba(0,0,0,.015); }
@@ -793,10 +706,6 @@ export const StatusChip = defineComponent({
 .sb-count-adjusting { color:#fde68a; }
 .sb-count-required  { color:rgba(255,255,255,.45); }
 .sb-emp-row { display:flex; align-items:center; gap:4px; line-height:1.6; }
-.sb-emp-icon { font-size:10px; width:12px; flex-shrink:0; }
-.icon-CONFIRMED { color:#a7f3d0; } .icon-SHIFT_REQUESTED { color:rgba(255,255,255,.8); }
-.icon-DAY_OFF_REQUESTED,.icon-DAY_OFF_CONFIRMED { color:rgba(255,255,255,.5); }
-.icon-ADJUSTING { color:#fde68a; }
 .sb-emp-name { color:rgba(255,255,255,.92); font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .sb-more { color:rgba(255,255,255,.45); font-size:9px; margin-top:1px; }
 .sb-hint { position:absolute; bottom:4px; right:7px; font-size:9px; color:rgba(255,255,255,.32); }

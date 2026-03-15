@@ -43,23 +43,6 @@
       </div>
     </div>
 
-    <!-- Slot heatmap -->
-    <div class="pa-3 border-t" style="background: #F8F9FA">
-      <div class="text-caption font-weight-bold text-medium-emphasis mb-2">時間帯別カバレッジ</div>
-      <div class="d-flex ga-1 flex-wrap">
-        <div
-          v-for="slot in heatmapSlots"
-          :key="slot.hour"
-          class="heatmap-cell"
-          :style="{
-            background: slotColor(slot.count),
-          }"
-          :title="`${slot.hour}:00 — ${slot.count}名`"
-        >
-          <span style="font-size: 8px">{{ slot.hour }}</span>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -88,38 +71,5 @@ const variancePercent = computed(() =>
   budget.value > 0 ? Math.round((totalCost.value / budget.value) * 100) : 0
 )
 
-// Heatmap: count employees working each hour across all entries
-const heatmapSlots = computed(() => {
-  const slots = Array.from({ length: 17 }, (_, i) => ({ hour: i + 7, count: 0 }))
-  for (const entry of shiftStore.entries) {
-    const [sh] = entry.startTime.split(':').map(Number)
-    const [eh] = entry.endTime.split(':').map(Number)
-    for (let h = sh; h < eh; h++) {
-      const slot = slots.find(s => s.hour === h)
-      if (slot) slot.count++
-    }
-  }
-  return slots
-})
-
-function slotColor(count: number): string {
-  if (count === 0) return '#E0E1E4'
-  if (count <= 2) return '#DBEAFE'
-  if (count <= 4) return '#93C5FD'
-  if (count <= 6) return '#3587dc'
-  return '#1D4ED8'
-}
 </script>
 
-<style scoped>
-.heatmap-cell {
-  width: 22px;
-  height: 22px;
-  border-radius: 3px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #555;
-  cursor: default;
-}
-</style>
