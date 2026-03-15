@@ -151,7 +151,16 @@
               </div>
 
               <div v-for="role in dept.roles" :key="role.role" class="role-section mb-3">
-                <div class="role-title text-caption font-weight-medium text-medium-emphasis mb-2">{{ role.role }}（{{ role.required }}名必要）</div>
+                <div class="role-title mb-2">
+                  <span class="text-caption font-weight-medium text-medium-emphasis">{{ role.role }}（{{ role.required }}名必要・確定 {{ role.confirmedCount }}名）</span>
+                  <v-btn
+                    size="x-small" color="primary" variant="text" rounded="lg"
+                    prepend-icon="mdi-account-plus-outline"
+                    @click="addExtraSlot(dept.department, role.role)"
+                  >
+                    + シフトを追加
+                  </v-btn>
+                </div>
 
                 <!-- ── Employee rows ── -->
                 <template v-for="emp in role.employees" :key="emp.entry.id">
@@ -180,8 +189,13 @@
                         <v-btn size="x-small" color="primary" variant="flat" rounded="lg" @click="shiftStore.finalizeAdjustment(emp.entry.id, 'CONFIRMED')">シフト確定</v-btn>
                         <v-btn size="x-small" color="default" variant="tonal" rounded="lg" class="ml-1" @click="shiftStore.finalizeAdjustment(emp.entry.id, 'DAY_OFF_CONFIRMED')">休み確定</v-btn>
                       </template>
+                      <!-- DAY_OFF_CONFIRMED: allow urgent adjustment + revert if DRAFT -->
+                      <template v-else-if="emp.entry.cellStatus === 'DAY_OFF_CONFIRMED' && boardStatus === 'DRAFT'">
+                        <v-btn size="x-small" color="warning" variant="tonal" rounded="lg" @click="toggleAdjust(emp.entry)">調整依頼…</v-btn>
+                        <v-btn size="x-small" color="error" variant="text" rounded="lg" class="ml-1" @click="toggleRevert(emp.entry)">取り消し</v-btn>
+                      </template>
                       <!-- CONFIRMED: revert if DRAFT -->
-                      <template v-else-if="(emp.entry.cellStatus === 'CONFIRMED' || emp.entry.cellStatus === 'DAY_OFF_CONFIRMED') && boardStatus === 'DRAFT'">
+                      <template v-else-if="emp.entry.cellStatus === 'CONFIRMED' && boardStatus === 'DRAFT'">
                         <v-btn size="x-small" color="error" variant="text" rounded="lg" @click="toggleRevert(emp.entry)">取り消し</v-btn>
                       </template>
                       <!-- PUBLISHED + confirmed -->
@@ -203,7 +217,7 @@
                         <v-icon size="20" color="warning" class="mx-1">mdi-arrow-right-bold</v-icon>
                         <div class="nego-side">
                           <div class="nego-side-label">マネージャーの要望</div>
-                          <StatusChip :status="emp.entry.preAdjustStatus === 'DAY_OFF_REQUESTED' ? 'CONFIRMED' : 'DAY_OFF_CONFIRMED'" />
+                          <StatusChip :status="(emp.entry.preAdjustStatus === 'DAY_OFF_REQUESTED' || emp.entry.preAdjustStatus === 'DAY_OFF_CONFIRMED') ? 'CONFIRMED' : 'DAY_OFF_CONFIRMED'" />
                         </div>
                         <v-spacer />
                         <!-- Response badge -->
@@ -246,7 +260,7 @@
                         <span class="text-caption font-weight-medium" style="color:#92400e">スタッフのデバイスに通知が送信されます</span>
                       </div>
                       <div class="text-caption text-medium-emphasis mb-2">
-                        <template v-if="emp.entry.cellStatus === 'DAY_OFF_REQUESTED'">休み希望を保留し、出勤を依頼する理由を入力してください。</template>
+                        <template v-if="emp.entry.cellStatus === 'DAY_OFF_REQUESTED' || emp.entry.cellStatus === 'DAY_OFF_CONFIRMED'">休みの予定を変更し、出勤をお願いする理由を入力してください。</template>
                         <template v-else>シフト希望を承認できない理由と、調整内容を入力してください。</template>
                       </div>
                       <v-textarea v-model="adjustState.reason" label="従業員へのメッセージ（必須）" auto-grow rows="2" max-rows="4" density="compact" variant="outlined" rounded="lg" hide-details="auto" class="mb-3" placeholder="例：〇日は人員が不足しているため、ご出勤をお願いできますか？" />
@@ -273,58 +287,89 @@
                   </v-expand-transition>
                 </template>
 
-                <!-- ── Unfilled slots + direct request ── -->
-                <template v-for="n in Math.max(role.required - role.employees.length, 0)" :key="`req-${n}`">
+                <!-- ── Required unfilled rows (disappear naturally as workingCount rises) ── -->
+                <template v-for="n in Math.max(role.required - role.workingCount, 0)" :key="`req-${n}`">
                   <div class="emp-row emp-row--empty">
                     <div class="emp-row-info">
                       <span class="unfilled-badge">未割当</span>
-                      <span class="text-caption text-medium-emphasis ml-2">—</span>
                     </div>
-                    <v-btn
-                      size="x-small" color="primary" variant="tonal" rounded="lg"
-                      prepend-icon="mdi-account-plus-outline"
-                      @click="toggleRequestPanel(dept.department, role.role, detailDialog.date, detailDialog.slot!)"
-                    >
+                    <v-btn size="x-small" color="primary" variant="tonal" rounded="lg" prepend-icon="mdi-account-plus-outline"
+                      @click="toggleRequestPanel(dept.department, role.role, detailDialog.date, detailDialog.slot!, `req-${n}`)">
                       スタッフを招集
                     </v-btn>
                   </div>
-
-                  <!-- Inline: employee selection for direct request -->
                   <v-expand-transition>
-                    <div
-                      v-if="requestPanel?.dept === dept.department && requestPanel?.role === role.role && requestPanel?.date === detailDialog.date"
-                      class="inline-panel inline-panel--request"
-                    >
+                    <div v-if="requestPanel?.rowKey === `req-${n}` && requestPanel?.dept === dept.department && requestPanel?.role === role.role" class="inline-panel inline-panel--request">
                       <div class="d-flex align-center ga-2 mb-2">
                         <v-icon size="15" color="primary">mdi-send-outline</v-icon>
                         <span class="text-caption font-weight-medium">シフト依頼を送るスタッフを選択</span>
                         <span class="text-caption text-medium-emphasis">（複数選択可）</span>
                       </div>
-
-                      <div v-if="availableForRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!).length === 0" class="text-caption text-medium-emphasis pa-2">
-                        対象のスタッフが見つかりません
-                      </div>
+                      <div v-if="availableForRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!).length === 0" class="text-caption text-medium-emphasis pa-2">対象のスタッフが見つかりません</div>
                       <div v-else class="request-emp-list mb-3">
-                        <div
-                          v-for="emp in availableForRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!)"
-                          :key="emp.id"
-                          class="request-emp-row"
-                          :class="{ 'request-emp-row--selected': requestPanel.selectedIds.includes(emp.id) }"
-                          @click="toggleRequestSelection(emp.id)"
-                        >
-                          <v-checkbox-btn :model-value="requestPanel.selectedIds.includes(emp.id)" density="compact" color="primary" hide-details @click.stop="toggleRequestSelection(emp.id)" />
+                        <div v-for="candidate in availableForRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!)" :key="candidate.id"
+                          class="request-emp-row" :class="{ 'request-emp-row--selected': requestPanel.selectedIds.includes(candidate.id) }"
+                          @click="toggleRequestSelection(candidate.id)">
+                          <v-checkbox-btn :model-value="requestPanel.selectedIds.includes(candidate.id)" density="compact" color="primary" hide-details @click.stop="toggleRequestSelection(candidate.id)" />
                           <div class="flex-1-1">
-                            <div class="text-body-2 font-weight-medium">{{ emp.name }}</div>
-                            <div class="text-caption text-medium-emphasis">{{ emp.position }} · ¥{{ emp.hourlyWage.toLocaleString() }}/h</div>
+                            <div class="text-body-2 font-weight-medium">{{ candidate.name }}</div>
+                            <div class="text-caption text-medium-emphasis">{{ candidate.position }} · ¥{{ candidate.hourlyWage.toLocaleString() }}/h</div>
                           </div>
                         </div>
                       </div>
-
                       <div class="d-flex justify-space-between align-center">
                         <span class="text-caption text-medium-emphasis">{{ requestPanel.selectedIds.length }}名選択中</span>
                         <div class="d-flex ga-2">
                           <v-btn size="small" variant="text" @click="clearState">キャンセル</v-btn>
-                          <v-btn size="small" color="primary" variant="flat" rounded="lg" prepend-icon="mdi-send-outline" :disabled="requestPanel.selectedIds.length === 0" @click="submitDirectRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!)">
+                          <v-btn size="small" color="primary" variant="flat" rounded="lg" prepend-icon="mdi-send-outline" :disabled="requestPanel.selectedIds.length === 0"
+                            @click="submitDirectRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!)">
+                            依頼を送信（{{ requestPanel.selectedIds.length }}名）
+                          </v-btn>
+                        </div>
+                      </div>
+                    </div>
+                  </v-expand-transition>
+                </template>
+
+                <!-- ── Extra rows (manager-added, each independently removable) ── -->
+                <template v-for="extraId in getExtraSlotIds(dept.department, role.role)" :key="extraId">
+                  <div class="emp-row emp-row--empty">
+                    <div class="emp-row-info">
+                      <span class="unfilled-badge">未割当</span>
+                      <v-btn icon size="x-small" variant="text" class="ml-1" @click="removeExtraSlot(dept.department, role.role, extraId)">
+                        <v-icon size="14" color="medium-emphasis">mdi-close</v-icon>
+                      </v-btn>
+                    </div>
+                    <v-btn size="x-small" color="primary" variant="tonal" rounded="lg" prepend-icon="mdi-account-plus-outline"
+                      @click="toggleRequestPanel(dept.department, role.role, detailDialog.date, detailDialog.slot!, extraId)">
+                      スタッフを招集
+                    </v-btn>
+                  </div>
+                  <v-expand-transition>
+                    <div v-if="requestPanel?.rowKey === extraId && requestPanel?.dept === dept.department && requestPanel?.role === role.role" class="inline-panel inline-panel--request">
+                      <div class="d-flex align-center ga-2 mb-2">
+                        <v-icon size="15" color="primary">mdi-send-outline</v-icon>
+                        <span class="text-caption font-weight-medium">シフト依頼を送るスタッフを選択</span>
+                        <span class="text-caption text-medium-emphasis">（複数選択可）</span>
+                      </div>
+                      <div v-if="availableForRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!).length === 0" class="text-caption text-medium-emphasis pa-2">対象のスタッフが見つかりません</div>
+                      <div v-else class="request-emp-list mb-3">
+                        <div v-for="candidate in availableForRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!)" :key="candidate.id"
+                          class="request-emp-row" :class="{ 'request-emp-row--selected': requestPanel.selectedIds.includes(candidate.id) }"
+                          @click="toggleRequestSelection(candidate.id)">
+                          <v-checkbox-btn :model-value="requestPanel.selectedIds.includes(candidate.id)" density="compact" color="primary" hide-details @click.stop="toggleRequestSelection(candidate.id)" />
+                          <div class="flex-1-1">
+                            <div class="text-body-2 font-weight-medium">{{ candidate.name }}</div>
+                            <div class="text-caption text-medium-emphasis">{{ candidate.position }} · ¥{{ candidate.hourlyWage.toLocaleString() }}/h</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="d-flex justify-space-between align-center">
+                        <span class="text-caption text-medium-emphasis">{{ requestPanel.selectedIds.length }}名選択中</span>
+                        <div class="d-flex ga-2">
+                          <v-btn size="small" variant="text" @click="clearState">キャンセル</v-btn>
+                          <v-btn size="small" color="primary" variant="flat" rounded="lg" prepend-icon="mdi-send-outline" :disabled="requestPanel.selectedIds.length === 0"
+                            @click="submitDirectRequest(dept.department, role.role, detailDialog.date, detailDialog.slot!)">
                             依頼を送信（{{ requestPanel.selectedIds.length }}名）
                           </v-btn>
                         </div>
@@ -410,8 +455,6 @@ function getSlotEntries(date: string, slot: ShiftSlot) {
   const slotEnd = timeToMin(slot.endTime)
   return props.entries.filter(e =>
     e.shiftDate === date
-    && e.cellStatus !== 'DAY_OFF_CONFIRMED'
-    && e.cellStatus !== 'DAY_OFF_REQUESTED'
     && timeToMin(e.startTime) < slotEnd
     && timeToMin(e.endTime) > slotStart,
   )
@@ -431,7 +474,7 @@ function covText(date: string, slot: ShiftSlot): string {
 
 // ─── Breakdown ────────────────────────────────────────────────
 interface EmpInfo { entry: ShiftEntry; name: string }
-interface RoleInfo { role: string; required: number; employees: EmpInfo[] }
+interface RoleInfo { role: string; required: number; employees: EmpInfo[]; confirmedCount: number; workingCount: number }
 interface DeptBreakdown { department: string; confirmed: number; pending: number; adjusting: number; required: number; roles: RoleInfo[]; topEmployees: EmpInfo[]; hiddenCount: number }
 interface CoverageStat { department: string; confirmed: number; pending: number; adjusting: number; required: number }
 interface Breakdown { departments: DeptBreakdown[]; coverageStats: CoverageStat[] }
@@ -448,12 +491,14 @@ function getSlotBreakdown(date: string, slot: ShiftSlot): Breakdown {
     const pending = deptEntries.filter(e => e.cellStatus === 'SHIFT_REQUESTED').length
     const adjusting = deptEntries.filter(e => e.cellStatus === 'ADJUSTING').length
 
-    const roles: RoleInfo[] = dc.roleRequirements.map(rr => ({
-      role: rr.role, required: rr.count,
-      employees: deptEntries
+    const roles: RoleInfo[] = dc.roleRequirements.map((rr) => {
+      const roleEmps = deptEntries
         .filter(e => getEmployee(e.employeeId)?.position === rr.role)
-        .map(e => ({ entry: e, name: getEmployee(e.employeeId)?.name ?? e.employeeId })),
-    }))
+        .map(e => ({ entry: e, name: getEmployee(e.employeeId)?.name ?? e.employeeId }))
+      const confirmedCount = roleEmps.filter(e => e.entry.cellStatus === 'CONFIRMED').length
+      const workingCount = roleEmps.filter(e => ['CONFIRMED', 'SHIFT_REQUESTED', 'ADJUSTING'].includes(e.entry.cellStatus)).length
+      return { role: rr.role, required: rr.count, employees: roleEmps, confirmedCount, workingCount }
+    })
 
     const allEmps = roles.flatMap(r => r.employees)
     departments.push({ department: dc.department, confirmed, pending, adjusting, required, roles, topEmployees: allEmps.slice(0, MAX_COMPACT), hiddenCount: Math.max(allEmps.length - MAX_COMPACT, 0) })
@@ -477,11 +522,12 @@ const adjustState = reactive<{ entryId: string | null; mode: 'adjust' | 'revert'
 })
 const activeEntryId = computed(() => adjustState.entryId)
 
-interface RequestPanelState { dept: string; role: string; date: string; slotId: string; selectedIds: string[] }
+interface RequestPanelState { dept: string; role: string; date: string; slotId: string; selectedIds: string[]; rowKey: string }
 const requestPanel = ref<RequestPanelState | null>(null)
 
 function openDetail(date: string, slot: ShiftSlot) {
   clearState()
+  extraSlots.value = {}
   detailDialog.value = { show: true, date, slot }
 }
 function closeDetail() { clearState(); detailDialog.value.show = false }
@@ -525,12 +571,34 @@ function revertTargetLabel(entry: ShiftEntry): string {
 }
 
 // ─── Direct request (filling unfilled slots) ──────────────────
-function toggleRequestPanel(dept: string, role: string, date: string, slot: ShiftSlot) {
-  if (requestPanel.value?.dept === dept && requestPanel.value?.role === role && requestPanel.value?.date === date) {
+function toggleRequestPanel(dept: string, role: string, date: string, slot: ShiftSlot, rowKey: string) {
+  if (requestPanel.value?.dept === dept && requestPanel.value?.role === role && requestPanel.value?.date === date && requestPanel.value?.rowKey === rowKey) {
     requestPanel.value = null; return
   }
   adjustState.entryId = null; adjustState.mode = null
-  requestPanel.value = { dept, role, date, slotId: slot.id, selectedIds: [] }
+  requestPanel.value = { dept, role, date, slotId: slot.id, selectedIds: [], rowKey }
+}
+
+const extraSlots = ref<Record<string, string[]>>({})
+let extraSlotSeq = 0
+
+function addExtraSlot(dept: string, role: string) {
+  const key = `${dept}|${role}`
+  if (!extraSlots.value[key]) extraSlots.value[key] = []
+  extraSlots.value[key].push(`extra-${++extraSlotSeq}`)
+}
+
+function removeExtraSlot(dept: string, role: string, slotId: string) {
+  const key = `${dept}|${role}`
+  const arr = extraSlots.value[key]
+  if (!arr) return
+  const idx = arr.indexOf(slotId)
+  if (idx !== -1) arr.splice(idx, 1)
+  if (requestPanel.value?.rowKey === slotId) requestPanel.value = null
+}
+
+function getExtraSlotIds(dept: string, role: string): string[] {
+  return extraSlots.value[`${dept}|${role}`] ?? []
 }
 
 function availableForRequest(dept: string, role: string, date: string, slot: ShiftSlot): Employee[] {
@@ -553,7 +621,7 @@ function toggleRequestSelection(empId: string) {
 
 function submitDirectRequest(dept: string, role: string, date: string, slot: ShiftSlot) {
   if (!requestPanel.value || requestPanel.value.selectedIds.length === 0) return
-  const emp = getEmployee(requestPanel.value.selectedIds[0])
+  const rowKey = requestPanel.value.rowKey
   const newEntries: ShiftEntry[] = requestPanel.value.selectedIds.map((empId, i) => {
     const employee = getEmployee(empId)
     const wage = employee ? Math.round(employee.hourlyWage * (timeToMin(slot.endTime) - timeToMin(slot.startTime)) / 60) : 0
@@ -571,7 +639,9 @@ function submitDirectRequest(dept: string, role: string, date: string, slot: Shi
     }
   })
   shiftStore.addDirectRequests(newEntries)
-  clearState()
+  // If this was an extra row, remove it; required rows vanish naturally as workingCount increases
+  if (rowKey.startsWith('extra-')) removeExtraSlot(dept, role, rowKey)
+  else clearState()
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -740,7 +810,7 @@ export const StatusChip = defineComponent({
 .cov-chip--pending  { background:rgba(255,255,255,.12); color:rgba(255,255,255,.8); }
 
 .role-section { padding-left:12px; border-left:2px solid rgba(0,0,0,.07); }
-.role-title { display:block; }
+.role-title { display:flex; align-items:center; justify-content:space-between; }
 
 .emp-row { display:flex; align-items:center; justify-content:space-between; padding:7px 6px; border-bottom:1px solid rgba(0,0,0,.05); border-radius:6px; transition:background .1s; }
 .emp-row--active { background:rgba(245,158,11,.06); }
