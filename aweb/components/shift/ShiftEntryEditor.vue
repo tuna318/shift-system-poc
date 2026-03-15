@@ -39,7 +39,9 @@
           </div>
 
           <!-- ── Status section (edit only) ── -->
-          <div v-if="isEdit" class="status-section">
+          <div v-if="isEdit && props.entry" class="status-section">
+
+            <!-- ① Status chip row -->
             <div class="d-flex align-center justify-space-between">
               <span class="text-caption font-weight-bold text-medium-emphasis" style="letter-spacing: 0.04em">申請ステータス</span>
               <div class="editor-status-chip" :class="`editor-chip--${currentStatusConfig.styleKey}`">
@@ -48,27 +50,136 @@
               </div>
             </div>
 
-            <!-- Dynamic hint for request statuses -->
-            <div
-              v-if="isRequestedStatus"
-              class="action-hint mt-3"
-              :class="{ 'action-hint--warn': timeModified }"
-            >
-              <v-icon size="14" :color="timeModified ? 'warning' : 'primary'">
-                {{ timeModified ? 'mdi-swap-horizontal-circle-outline' : 'mdi-check-circle-outline' }}
-              </v-icon>
-              <span class="text-caption" :class="timeModified ? 'text-warning-darken' : 'text-primary'">
-                <template v-if="timeModified">
-                  時刻を変更しました。保存すると <strong>調整中</strong> になります。
-                </template>
-                <template v-else>
-                  このまま保存すると <strong>{{ confirmLabel }}</strong> になります。
-                </template>
-              </span>
+            <!-- Action buttons -->
+            <div class="d-flex flex-wrap ga-2 mt-3">
+              <!-- SHIFT_REQUESTED -->
+              <template v-if="props.entry.cellStatus === 'SHIFT_REQUESTED'">
+                <v-btn size="small" color="primary" variant="flat" rounded="lg" @click="doConfirm('CONFIRMED')">シフト確定</v-btn>
+                <v-btn size="small" color="warning" variant="tonal" rounded="lg" @click="toggleActionMode('adjust')">調整依頼…</v-btn>
+              </template>
+              <!-- DAY_OFF_REQUESTED -->
+              <template v-else-if="props.entry.cellStatus === 'DAY_OFF_REQUESTED'">
+                <v-btn size="small" color="default" variant="flat" rounded="lg" @click="doConfirm('DAY_OFF_CONFIRMED')">休み確定</v-btn>
+                <v-btn size="small" color="warning" variant="tonal" rounded="lg" @click="toggleActionMode('adjust')">調整依頼…</v-btn>
+              </template>
+              <!-- ADJUSTING -->
+              <template v-else-if="props.entry.cellStatus === 'ADJUSTING'">
+                <v-btn size="small" color="primary" variant="flat" rounded="lg" @click="doFinalize('CONFIRMED')">シフト確定</v-btn>
+                <v-btn size="small" color="default" variant="tonal" rounded="lg" @click="doFinalize('DAY_OFF_CONFIRMED')">休み確定</v-btn>
+              </template>
+              <!-- DAY_OFF_CONFIRMED + DRAFT -->
+              <template v-else-if="props.entry.cellStatus === 'DAY_OFF_CONFIRMED' && props.boardStatus === 'DRAFT'">
+                <v-btn size="small" color="warning" variant="tonal" rounded="lg" @click="toggleActionMode('adjust')">調整依頼…</v-btn>
+                <v-btn size="small" color="error" variant="text" rounded="lg" @click="toggleActionMode('revert')">取り消し</v-btn>
+              </template>
+              <!-- CONFIRMED + DRAFT -->
+              <template v-else-if="props.entry.cellStatus === 'CONFIRMED' && props.boardStatus === 'DRAFT'">
+                <v-btn size="small" color="error" variant="text" rounded="lg" @click="toggleActionMode('revert')">取り消し</v-btn>
+              </template>
+              <!-- PUBLISHED + confirmed statuses -->
+              <template v-else-if="props.boardStatus === 'PUBLISHED'">
+                <span class="text-caption text-medium-emphasis">確定済 – 変更不可</span>
+              </template>
             </div>
+
+            <!-- ② Negotiation card (always visible when ADJUSTING) -->
+            <v-expand-transition>
+              <div v-if="props.entry.cellStatus === 'ADJUSTING'" class="negotiation-card mt-3">
+                <div class="d-flex align-center ga-2 mb-3">
+                  <div class="nego-side">
+                    <div class="nego-side-label">スタッフの希望</div>
+                    <div class="editor-status-chip" :class="`editor-chip--${statusConfigs[props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'].styleKey}`">
+                      <v-icon :size="12">{{ statusConfigs[props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'].icon }}</v-icon>
+                      <span>{{ statusConfigs[props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'].label }}</span>
+                    </div>
+                  </div>
+                  <v-icon size="20" color="warning" class="mx-1">mdi-arrow-right-bold</v-icon>
+                  <div class="nego-side">
+                    <div class="nego-side-label">マネージャーの要望</div>
+                    <div class="editor-status-chip" :class="`editor-chip--${managerRequestedStatusConfig.styleKey}`">
+                      <v-icon :size="12">{{ managerRequestedStatusConfig.icon }}</v-icon>
+                      <span>{{ managerRequestedStatusConfig.label }}</span>
+                    </div>
+                  </div>
+                  <v-spacer />
+                  <div class="response-badge" :class="`response-badge--${props.entry.adjustingResponseStatus ?? 'PENDING'}`">
+                    <v-icon size="13">{{ responseIcon(props.entry.adjustingResponseStatus) }}</v-icon>
+                    {{ responseLabel(props.entry.adjustingResponseStatus) }}
+                  </div>
+                </div>
+                <div class="message-thread">
+                  <div class="message-bubble message-bubble--manager">
+                    <div class="message-sender">
+                      <v-icon size="13">mdi-briefcase-outline</v-icon> マネージャー
+                    </div>
+                    <div class="message-body">{{ props.entry.adjustingReason ?? '調整を依頼しています。' }}</div>
+                  </div>
+                  <div v-if="props.entry.adjustingResponse" class="message-bubble message-bubble--employee">
+                    <div class="message-sender">
+                      <v-icon size="13">mdi-account-outline</v-icon> {{ employeeName }}
+                    </div>
+                    <div class="message-body">{{ props.entry.adjustingResponse }}</div>
+                  </div>
+                  <div v-else class="message-waiting">
+                    <v-icon size="13" color="medium-emphasis">mdi-clock-outline</v-icon>
+                    <span class="text-caption text-medium-emphasis">スタッフの返答待ち...</span>
+                  </div>
+                </div>
+              </div>
+            </v-expand-transition>
+
+            <!-- ③ Inline: Adjust form -->
+            <v-expand-transition>
+              <div v-if="actionMode === 'adjust'" class="inline-panel inline-panel--warn mt-3">
+                <div class="d-flex align-center ga-2 mb-2">
+                  <v-icon size="15" color="warning">mdi-cellphone-message</v-icon>
+                  <span class="text-caption font-weight-medium" style="color:#92400e">スタッフのデバイスに通知が送信されます</span>
+                </div>
+                <div class="text-caption text-medium-emphasis mb-2">
+                  <template v-if="props.entry.cellStatus === 'DAY_OFF_REQUESTED' || props.entry.cellStatus === 'DAY_OFF_CONFIRMED'">
+                    休みの予定を変更し、出勤をお願いする理由を入力してください。
+                  </template>
+                  <template v-else>シフト希望を承認できない理由と、調整内容を入力してください。</template>
+                </div>
+                <v-textarea
+                  v-model="adjustReason"
+                  label="従業員へのメッセージ（必須）"
+                  auto-grow rows="2" max-rows="4"
+                  density="compact" variant="outlined" rounded="lg"
+                  hide-details="auto" class="mb-3"
+                  placeholder="例：〇日は人員が不足しているため、ご出勤をお願いできますか？"
+                />
+                <div class="d-flex justify-end ga-2">
+                  <v-btn size="small" variant="text" @click="actionMode = null">キャンセル</v-btn>
+                  <v-btn
+                    size="small" color="warning" variant="flat" rounded="lg"
+                    prepend-icon="mdi-send-outline"
+                    :disabled="!adjustReason.trim()"
+                    @click="submitAdjust"
+                  >
+                    送信して調整中にする
+                  </v-btn>
+                </div>
+              </div>
+            </v-expand-transition>
+
+            <!-- ③ Inline: Revert confirm -->
+            <v-expand-transition>
+              <div v-if="actionMode === 'revert'" class="inline-panel inline-panel--error mt-3">
+                <div class="d-flex align-center ga-2 mb-2">
+                  <v-icon size="15" color="error">mdi-undo-variant</v-icon>
+                  <span class="text-caption font-weight-medium" style="color:#b91c1c">確定を取り消しますか？</span>
+                </div>
+                <div class="text-caption text-medium-emphasis mb-3">「{{ revertTargetLabel }}」に戻します。この操作は取り消せます。</div>
+                <div class="d-flex justify-end ga-2">
+                  <v-btn size="small" variant="text" @click="actionMode = null">キャンセル</v-btn>
+                  <v-btn size="small" color="error" variant="flat" rounded="lg" @click="submitRevert">取り消す</v-btn>
+                </div>
+              </div>
+            </v-expand-transition>
           </div>
 
-          <!-- ── Time range (hidden for day-off statuses) ── -->
+          <!-- ── Time range (add mode, SHIFT_REQUESTED, or CONFIRMED) ── -->
           <template v-if="showTimeFields">
             <div class="d-flex ga-3">
               <div class="flex-1-1">
@@ -146,6 +257,7 @@
         <v-spacer />
         <v-btn variant="text" @click="close">キャンセル</v-btn>
         <v-btn
+          v-if="showSaveButton"
           :color="saveButtonColor"
           variant="flat"
           :disabled="!isValid"
@@ -161,13 +273,14 @@
 <script setup lang="ts">
 import { useMockData } from '~/composables/useMockData'
 import { useShiftStore, MAX_MONTHLY_HOURS } from '~/stores/shift.store'
-import type { ShiftEntry, CellStatus } from '~/types'
+import type { ShiftEntry, CellStatus, AdjustingResponseStatus } from '~/types'
 
 const props = defineProps<{
   modelValue: boolean
   employeeId: string
   shiftDate: string
   entry?: ShiftEntry | null
+  boardStatus?: 'DRAFT' | 'PUBLISHED'
 }>()
 
 const emit = defineEmits<{
@@ -211,16 +324,75 @@ const currentStatusConfig = computed<StatusConfig>(() =>
   statusConfigs[props.entry?.cellStatus ?? 'CONFIRMED']
 )
 
-// Whether this entry was submitted by an employee (manager needs to act on it)
-const isRequestedStatus = computed(() =>
-  props.entry?.cellStatus === 'SHIFT_REQUESTED' || props.entry?.cellStatus === 'DAY_OFF_REQUESTED'
-)
+// Manager's desired status (opposite of what employee requested)
+const managerRequestedStatusConfig = computed<StatusConfig>(() => {
+  const pre = props.entry?.preAdjustStatus
+  if (pre === 'DAY_OFF_REQUESTED' || pre === 'DAY_OFF_CONFIRMED') {
+    return statusConfigs.CONFIRMED
+  }
+  return statusConfigs.DAY_OFF_CONFIRMED
+})
 
-// The "confirm" target for each requested status
-const confirmStatus = computed<CellStatus>(() =>
-  props.entry?.cellStatus === 'DAY_OFF_REQUESTED' ? 'DAY_OFF_CONFIRMED' : 'CONFIRMED'
-)
-const confirmLabel = computed(() => statusConfigs[confirmStatus.value].label)
+// ── Inline action state ───────────────────────────────────────
+const actionMode = ref<null | 'adjust' | 'revert'>(null)
+const adjustReason = ref('')
+
+watch(() => props.entry, () => {
+  actionMode.value = null
+  adjustReason.value = ''
+})
+
+function toggleActionMode(mode: 'adjust' | 'revert') {
+  if (actionMode.value === mode) {
+    actionMode.value = null
+  } else {
+    actionMode.value = mode
+    adjustReason.value = ''
+  }
+}
+
+// ── Workflow helpers ──────────────────────────────────────────
+function responseIcon(s?: AdjustingResponseStatus): string {
+  if (s === 'ACCEPTED') return 'mdi-check-circle'
+  if (s === 'REJECTED') return 'mdi-close-circle'
+  return 'mdi-clock-outline'
+}
+function responseLabel(s?: AdjustingResponseStatus): string {
+  if (s === 'ACCEPTED') return '承諾'
+  if (s === 'REJECTED') return '拒否'
+  return '返答待ち'
+}
+
+const revertTargetLabel = computed(() => {
+  if (!props.entry) return ''
+  const target = props.entry.preAdjustStatus
+    ?? (props.entry.cellStatus === 'DAY_OFF_CONFIRMED' ? 'DAY_OFF_REQUESTED' : 'SHIFT_REQUESTED')
+  return statusConfigs[target]?.label ?? target
+})
+
+function doConfirm(status: CellStatus) {
+  if (!props.entry) return
+  shiftStore.updateCellStatus(props.entry.id, status)
+  close()
+}
+
+function doFinalize(status: 'CONFIRMED' | 'DAY_OFF_CONFIRMED') {
+  if (!props.entry) return
+  shiftStore.finalizeAdjustment(props.entry.id, status)
+  close()
+}
+
+function submitAdjust() {
+  if (!props.entry || !adjustReason.value.trim()) return
+  shiftStore.requestAdjustment(props.entry.id, adjustReason.value.trim())
+  close()
+}
+
+function submitRevert() {
+  if (!props.entry) return
+  shiftStore.revertToRequested(props.entry.id)
+  close()
+}
 
 // ── Form state ────────────────────────────────────────────────
 const form = reactive({
@@ -241,6 +413,17 @@ watch(() => props.entry, (entry) => {
   }
 }, { immediate: true })
 
+// Whether this entry was submitted by an employee (manager needs to act on it)
+const isRequestedStatus = computed(() =>
+  props.entry?.cellStatus === 'SHIFT_REQUESTED' || props.entry?.cellStatus === 'DAY_OFF_REQUESTED'
+)
+
+// The "confirm" target for each requested status
+const confirmStatus = computed<CellStatus>(() =>
+  props.entry?.cellStatus === 'DAY_OFF_REQUESTED' ? 'DAY_OFF_CONFIRMED' : 'CONFIRMED'
+)
+const confirmLabel = computed(() => statusConfigs[confirmStatus.value].label)
+
 // Detect if the manager changed the time from the employee's original request
 const timeModified = computed(() =>
   isRequestedStatus.value &&
@@ -248,10 +431,26 @@ const timeModified = computed(() =>
   (form.startTime !== props.entry.startTime || form.endTime !== props.entry.endTime)
 )
 
-// Status that will be written on save
+// Status that will be written on save (secondary path via save button)
 const resolvedStatus = computed<CellStatus>(() => {
   if (!isRequestedStatus.value || !props.entry) return props.entry?.cellStatus ?? 'CONFIRMED'
   return timeModified.value ? 'ADJUSTING' : confirmStatus.value
+})
+
+// Show time fields: add mode, SHIFT_REQUESTED, or CONFIRMED
+const showTimeFields = computed(() => {
+  if (!isEdit.value) return true
+  const s = props.entry?.cellStatus
+  return s === 'SHIFT_REQUESTED' || s === 'CONFIRMED'
+})
+
+// Show save button: add mode, SHIFT_REQUESTED, or CONFIRMED in DRAFT; hidden for ADJUSTING / DAY_OFF_* / PUBLISHED
+const showSaveButton = computed(() => {
+  if (!isEdit.value) return true
+  const s = props.entry?.cellStatus
+  if (s === 'ADJUSTING' || s === 'DAY_OFF_REQUESTED' || s === 'DAY_OFF_CONFIRMED') return false
+  if (props.boardStatus === 'PUBLISHED') return false
+  return true
 })
 
 // Smart save button label + color
@@ -263,12 +462,6 @@ const saveButtonLabel = computed(() => {
 const saveButtonColor = computed(() =>
   isRequestedStatus.value && timeModified.value ? 'warning' : 'primary'
 )
-
-// Show time fields for all statuses except pure day-off entries
-const showTimeFields = computed(() => {
-  const s = props.entry?.cellStatus
-  return s !== 'DAY_OFF_CONFIRMED' && s !== 'DAY_OFF_REQUESTED'
-})
 
 // ── Time / wage helpers ───────────────────────────────────────
 const timeOptions = computed(() => {
@@ -391,22 +584,97 @@ function close() {
   color: #1c1917;
 }
 
-/* ── Action hint banner ───────────────────────────────── */
-.action-hint {
+/* ── Negotiation card ─────────────────────────────────── */
+.negotiation-card {
+  padding: 12px 14px;
+  background: rgba(245, 158, 11, 0.06);
+  border-left: 3px solid #f59e0b;
+  border-radius: 0 8px 8px 0;
+}
+
+.nego-side {
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  background: #EBF3FC;
-  border-radius: 6px;
-  padding: 7px 10px;
-  line-height: 1.4;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.action-hint.action-hint--warn {
-  background: #FFFBEB;
+.nego-side-label {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.5);
+  font-weight: 500;
 }
 
-.text-warning-darken {
-  color: #92400e;
+/* ── Response badge ───────────────────────────────────── */
+.response-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
+
+.response-badge--PENDING  { background: rgba(0, 0, 0, 0.07);    color: rgba(0, 0, 0, 0.5); }
+.response-badge--ACCEPTED { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+.response-badge--REJECTED { background: rgba(220, 38, 38, 0.1);  color: #b91c1c; }
+
+/* ── Message thread ──────────────────────────────────── */
+.message-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.message-bubble {
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.message-bubble--manager {
+  background: rgba(53, 135, 220, 0.08);
+  border: 1px solid rgba(53, 135, 220, 0.15);
+  align-self: flex-start;
+  max-width: 95%;
+}
+
+.message-bubble--employee {
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  align-self: flex-end;
+  max-width: 95%;
+}
+
+.message-sender {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.message-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.message-waiting {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 2px;
+}
+
+/* ── Inline panels ───────────────────────────────────── */
+.inline-panel {
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+
+.inline-panel--warn  { border-left: 3px solid #f59e0b; background: rgba(245, 158, 11, 0.06); }
+.inline-panel--error { border-left: 3px solid #ef4444; background: rgba(239, 68, 68, 0.05); }
 </style>

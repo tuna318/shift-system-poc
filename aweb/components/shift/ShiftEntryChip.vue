@@ -70,7 +70,7 @@ const statusLabel = computed(() => {
   cursor: pointer;
   font-size: 11px;
   line-height: 1.35;
-  min-height: 28px;
+  min-height: 22px;
   transition: filter 0.12s, opacity 0.12s;
   border: 1.5px solid transparent;
 }

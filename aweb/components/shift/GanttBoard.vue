@@ -68,8 +68,8 @@
               @click="openEditor(entry)"
             />
 
-            <!-- Add icon on hover (empty cells) -->
-            <div v-if="getEntries(emp.id, day.date).length === 0" class="cell-add-hint">
+            <!-- Add icon on hover -->
+            <div class="cell-add-hint" :class="{ 'cell-add-hint--corner': getEntries(emp.id, day.date).length > 0 }">
               <v-icon size="14" color="medium-emphasis">mdi-plus</v-icon>
             </div>
           </div>
@@ -114,6 +114,7 @@
       :employee-id="editorState.employeeId"
       :shift-date="editorState.shiftDate"
       :entry="editorState.entry"
+      :board-status="boardStatus"
       @save="handleSave"
       @delete="handleDelete"
     />
@@ -133,6 +134,8 @@ const props = defineProps<{
 
 const shiftStore = useShiftStore()
 const { employees: allEmployees } = useMockData()
+
+const boardStatus = computed(() => shiftStore.currentBoard?.status ?? 'DRAFT')
 
 const empStatsMap = computed(() => {
   const map = new Map<string, (typeof shiftStore.perEmployeeStats)[0]>()
@@ -180,7 +183,7 @@ function getEntries(empId: string, date: string): ShiftEntry[] {
 function cellClass(empId: string, date: string): string {
   const entries = getEntries(empId, date)
   if (entries.length === 0) return 'cell-undecided'
-  const first = entries[0]
+  if (entries.length > 1) return 'cell-multi'
   const map: Record<CellStatus, string> = {
     SHIFT_REQUESTED: 'cell-shift-requested',
     CONFIRMED: 'cell-confirmed',
@@ -188,7 +191,7 @@ function cellClass(empId: string, date: string): string {
     DAY_OFF_CONFIRMED: 'cell-day-off',
     ADJUSTING: 'cell-adjusting',
   }
-  return map[first.cellStatus] ?? 'cell-undecided'
+  return map[entries[0].cellStatus] ?? 'cell-undecided'
 }
 
 function deptColor(dept: string): string {
@@ -208,14 +211,12 @@ const editorState = reactive({
   entry: null as ShiftEntry | null,
 })
 
-function onCellClick(empId: string, date: string, event: MouseEvent) {
-  const entries = getEntries(empId, date)
-  if (entries.length === 0) {
-    editorState.employeeId = empId
-    editorState.shiftDate = date
-    editorState.entry = null
-    editorOpen.value = true
-  }
+function onCellClick(empId: string, date: string, _event: MouseEvent) {
+  // Always open in add-mode — chips handle their own click with @click.stop
+  editorState.employeeId = empId
+  editorState.shiftDate = date
+  editorState.entry = null
+  editorOpen.value = true
 }
 
 function openEditor(entry: ShiftEntry) {
@@ -318,8 +319,19 @@ const mainRef = ref<HTMLElement | null>(null)
   transform: translate(-50%, -50%);
 }
 
+.cell-add-hint--corner {
+  top: 3px;
+  right: 3px;
+  left: auto;
+  transform: none;
+}
+
 .gantt-day-cell:hover .cell-add-hint {
   display: flex;
+}
+
+.cell-multi {
+  background-color: #FFFFFF;
 }
 
 .gantt-stats-header {
