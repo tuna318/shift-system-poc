@@ -3,6 +3,7 @@ import type {
   CollectionRequest, CollectionSubmission, ComplianceAlert,
   ShiftPreference, ShiftPreferenceEntry, CellStatus, AdjustingResponseStatus,
   ShiftSlot, DaySlotAssignment, AllocationSetup,
+  CrossShopRequest, ConfirmedEmployee,
 } from '~/types'
 
 // ============================================================
@@ -518,6 +519,150 @@ function getCostSummary(boardId: string): {
 }
 
 // ============================================================
+// CROSS-SHOP REQUESTS
+// ============================================================
+const crossShopRequests: CrossShopRequest[] = [
+  {
+    // csr-001: outgoing, PARTIALLY_FILLED — 新宿店 proposed 田中 花子 (already confirmed),
+    // 原宿店 is NEW. Need 1 more.
+    id: 'csr-001',
+    boardId: 'board-1',
+    requestingShopId: 'shop-shibuya',
+    requestingShopName: '渋谷本店',
+    date: '2026-03-20',
+    startTime: '11:00',
+    endTime: '16:00',
+    department: 'ホール',
+    position: 'ホールスタッフ',
+    requiredCount: 2,
+    securedCount: 1,
+    status: 'PARTIALLY_FILLED',
+    targetResponses: [
+      {
+        shopId: 'shop-shinjuku', shopName: '新宿店', status: 'FULFILLED',
+        proposedEmployees: [{ id: 'emp-ext-1', name: '田中 花子', department: 'ホール', position: 'ホールスタッフ', hourlyWage: 1050 }],
+        respondedAt: '2026-03-14T10:00:00',
+      },
+      { shopId: 'shop-harajuku', shopName: '原宿店', status: 'NEW' },
+    ],
+    confirmedEmployees: [
+      { id: 'emp-ext-1', name: '田中 花子', department: 'ホール', position: 'ホールスタッフ', hourlyWage: 1050, fromShopId: 'shop-shinjuku', fromShopName: '新宿店' },
+    ] as ConfirmedEmployee[],
+    note: '週末イベントのため増員希望',
+    createdAt: '2026-03-13T09:00:00',
+  },
+  {
+    // csr-002: outgoing, FULFILLED — 新宿店 proposed 佐藤 健 (confirmed)
+    id: 'csr-002',
+    boardId: 'board-1',
+    requestingShopId: 'shop-shibuya',
+    requestingShopName: '渋谷本店',
+    date: '2026-03-21',
+    startTime: '17:00',
+    endTime: '22:00',
+    department: 'キッチン',
+    position: 'キッチンスタッフ',
+    requiredCount: 1,
+    securedCount: 1,
+    status: 'FULFILLED',
+    targetResponses: [
+      {
+        shopId: 'shop-shinjuku', shopName: '新宿店', status: 'FULFILLED',
+        proposedEmployees: [{ id: 'emp-ext-2', name: '佐藤 健', department: 'キッチン', position: 'キッチンスタッフ', hourlyWage: 1100 }],
+        respondedAt: '2026-03-13T14:00:00',
+      },
+    ],
+    confirmedEmployees: [
+      { id: 'emp-ext-2', name: '佐藤 健', department: 'キッチン', position: 'キッチンスタッフ', hourlyWage: 1100, fromShopId: 'shop-shinjuku', fromShopName: '新宿店' },
+    ] as ConfirmedEmployee[],
+    createdAt: '2026-03-12T11:00:00',
+  },
+  {
+    // csr-003: outgoing, PENDING — 原宿店 proposed 2 candidates but NOT yet confirmed by us.
+    // This demonstrates the "enough proposals → show confirm button" flow.
+    id: 'csr-003',
+    boardId: 'board-1',
+    requestingShopId: 'shop-shibuya',
+    requestingShopName: '渋谷本店',
+    date: '2026-03-22',
+    startTime: '10:00',
+    endTime: '15:00',
+    department: 'レジ',
+    position: 'レジスタッフ',
+    requiredCount: 1,
+    securedCount: 0,
+    status: 'PENDING',
+    targetResponses: [
+      {
+        shopId: 'shop-harajuku', shopName: '原宿店', status: 'FORWARDED',
+        proposedEmployees: [
+          { id: 'emp-ext-3', name: '木村 涼子', department: 'レジ', position: 'レジスタッフ', hourlyWage: 1050 },
+          { id: 'emp-ext-4', name: '橋本 翔', department: 'レジ', position: 'クルー', hourlyWage: 1000 },
+        ],
+        respondedAt: '2026-03-14T09:00:00',
+      },
+    ],
+    createdAt: '2026-03-14T08:30:00',
+  },
+  {
+    // csr-004: incoming from 新宿店 — our (渋谷本店) response is NEW
+    id: 'csr-004',
+    boardId: 'board-2',
+    requestingShopId: 'shop-shinjuku',
+    requestingShopName: '新宿店',
+    date: '2026-03-19',
+    startTime: '12:00',
+    endTime: '17:00',
+    department: 'ホール',
+    position: 'ホールスタッフ',
+    requiredCount: 1,
+    securedCount: 0,
+    status: 'PENDING',
+    targetResponses: [
+      { shopId: 'shop-shibuya', shopName: '渋谷本店', status: 'NEW' },
+    ],
+    note: 'ランチタイム応援希望',
+    createdAt: '2026-03-14T13:00:00',
+  },
+  {
+    // csr-005: incoming from 原宿店 — our (渋谷本店) response is REVIEWING,
+    // 池袋店 already proposed 山本 太郎 (FORWARDED, not yet confirmed by 原宿店)
+    id: 'csr-005',
+    boardId: 'board-2',
+    requestingShopId: 'shop-harajuku',
+    requestingShopName: '原宿店',
+    date: '2026-03-23',
+    startTime: '14:00',
+    endTime: '20:00',
+    department: 'キッチン',
+    position: 'キッチンスタッフ',
+    requiredCount: 2,
+    securedCount: 0,
+    status: 'PENDING',
+    targetResponses: [
+      { shopId: 'shop-shibuya', shopName: '渋谷本店', status: 'REVIEWING' },
+      {
+        shopId: 'shop-ikebukuro', shopName: '池袋店', status: 'FORWARDED',
+        proposedEmployees: [{ id: 'emp-ext-5', name: '山本 太郎', department: 'キッチン', position: 'キッチンスタッフ', hourlyWage: 1050 }],
+        respondedAt: '2026-03-14T16:00:00',
+      },
+    ],
+    createdAt: '2026-03-13T15:00:00',
+  },
+]
+
+function getOutgoingCrossShopRequests() {
+  return crossShopRequests.filter(r => r.requestingShopId === 'shop-shibuya')
+}
+
+function getIncomingCrossShopRequests() {
+  return crossShopRequests.filter(r =>
+    r.requestingShopId !== 'shop-shibuya'
+    && r.targetResponses.some(t => t.shopId === 'shop-shibuya'),
+  )
+}
+
+// ============================================================
 // EXPORT
 // ============================================================
 export function useMockData() {
@@ -535,5 +680,8 @@ export function useMockData() {
     getPreference,
     getCostSummary,
     getCollectionForBoard,
+    crossShopRequests,
+    getOutgoingCrossShopRequests,
+    getIncomingCrossShopRequests,
   }
 }

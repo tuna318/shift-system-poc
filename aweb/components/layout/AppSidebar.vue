@@ -77,6 +77,15 @@
           rounded="lg"
           class="sidebar-item ml-3"
         />
+        <v-list-item
+          to="/shifts/cross-shop"
+          prepend-icon="mdi-store-plus-outline"
+          title="他店舗応援"
+          active-color="white"
+          color="rgba(255,255,255,0.6)"
+          rounded="lg"
+          class="sidebar-item ml-3"
+        />
       </v-list-group>
 
       <!-- Rail mode shift links -->

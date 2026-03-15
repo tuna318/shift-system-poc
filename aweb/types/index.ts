@@ -151,3 +151,46 @@ export interface AllocationSetup {
   slots: ShiftSlot[]
   assignments: DaySlotAssignment[]
 }
+
+export type CrossShopRequestStatus = 'PENDING' | 'PARTIALLY_FILLED' | 'FULFILLED' | 'CANCELLED'
+export type CrossShopResponseStatus = 'NEW' | 'REVIEWING' | 'FORWARDED' | 'FULFILLED' | 'DECLINED'
+
+export interface ProposedEmployee {
+  id: string
+  name: string
+  department: string
+  position: string
+  hourlyWage?: number
+}
+
+export interface ConfirmedEmployee extends ProposedEmployee {
+  fromShopId: string
+  fromShopName: string
+}
+
+export interface CrossShopResponse {
+  shopId: string
+  shopName: string
+  status: CrossShopResponseStatus
+  proposedEmployees?: ProposedEmployee[]
+  respondedAt?: string
+}
+
+export interface CrossShopRequest {
+  id: string
+  boardId: string
+  requestingShopId: string
+  requestingShopName: string
+  date: string
+  startTime: string
+  endTime: string
+  department: string
+  position: string
+  requiredCount: number
+  securedCount: number
+  status: CrossShopRequestStatus
+  targetResponses: CrossShopResponse[]
+  confirmedEmployees?: ConfirmedEmployee[]
+  note?: string
+  createdAt: string
+}
