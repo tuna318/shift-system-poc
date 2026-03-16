@@ -15,6 +15,47 @@
       </v-btn>
     </div>
 
+    <!-- Block Library -->
+    <div class="block-library mb-3">
+      <div class="d-flex align-center justify-space-between mb-2">
+        <span class="library-title">ブロックライブラリ</span>
+        <v-btn size="x-small" variant="tonal" color="primary" rounded="lg"
+          prepend-icon="mdi-plus" @click="openAddTemplate">
+          カスタム追加
+        </v-btn>
+      </div>
+      <div class="library-scroll">
+        <div
+          v-for="tpl in libraryTemplates" :key="tpl.id"
+          class="library-card"
+          :style="{ '--tpl-color': tpl.color }"
+          @mousedown.prevent="onLibraryMouseDown($event, tpl)"
+        >
+          <div class="lc-bar" />
+          <div class="lc-body">
+            <div class="lc-label">{{ tpl.label }}</div>
+            <div class="lc-time">{{ tpl.startTime }}–{{ tpl.endTime }}</div>
+            <div class="lc-depts">{{ tpl.departmentConfigs.map(d => d.department).join('・') }}</div>
+          </div>
+          <v-menu>
+            <template #activator="{ props }">
+              <v-btn v-bind="props" icon size="x-small" variant="text"
+                class="lc-menu-btn" @mousedown.stop>
+                <v-icon size="14">mdi-dots-vertical</v-icon>
+              </v-btn>
+            </template>
+            <v-list density="compact" width="120">
+              <v-list-item title="編集" prepend-icon="mdi-pencil-outline"
+                @click="openEditTemplate(tpl)" />
+              <v-list-item title="削除" prepend-icon="mdi-delete-outline"
+                :disabled="libraryTemplates.length <= 1"
+                @click="deleteTemplate(tpl.id)" />
+            </v-list>
+          </v-menu>
+        </div>
+      </div>
+    </div>
+
     <!-- Calendar frame -->
     <div class="cal-frame">
 
@@ -60,9 +101,10 @@
             class="day-col"
             :class="{
               'day-col--out': !day.inPeriod,
-              'day-col--drop-target': eventDrag?.mode === 'move'
+              'day-col--drop-target': (eventDrag?.mode === 'move'
                 && eventDrag.previewDate === day.date
-                && eventDrag.previewDate !== eventDrag.fromDate,
+                && eventDrag.previewDate !== eventDrag.fromDate)
+                || (libraryDrag?.previewDate === day.date),
             }"
             :style="{ height: `${TOTAL_HEIGHT}px` }"
             @mousedown.prevent="day.inPeriod ? onColMouseDown($event, day.date) : undefined"
@@ -123,17 +165,56 @@
               <div class="eb-label">{{ drag.startTime }}</div>
               <div class="eb-time">{{ drag.endTime }}</div>
             </div>
+
+            <!-- Library drag preview -->
+            <div
+              v-if="libraryDrag?.previewDate === day.date"
+              class="event-block event-block--preview"
+              :style="{
+                ...getEventStyle({ ...libraryDrag.template, id: '_preview' } as ShiftSlot),
+                opacity: 0.55,
+                border: '2px dashed rgba(255,255,255,0.7)',
+                pointerEvents: 'none',
+              }"
+            >
+              <div class="eb-label">{{ libraryDrag.template.label }}</div>
+              <div class="eb-time">{{ libraryDrag.template.startTime }}–{{ libraryDrag.template.endTime }}</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Ghost card following cursor during library drag -->
+    <teleport to="body">
+      <div
+        v-if="libraryDrag"
+        class="library-ghost"
+        :style="{
+          left: `${libraryDrag.clientX}px`,
+          top: `${libraryDrag.clientY}px`,
+          '--tpl-color': libraryDrag.template.color,
+        }"
+      >
+        <div class="lc-bar" />
+        <div class="lc-body">
+          <div class="lc-label">{{ libraryDrag.template.label }}</div>
+          <div class="lc-time">{{ libraryDrag.template.startTime }}–{{ libraryDrag.template.endTime }}</div>
+        </div>
+      </div>
+    </teleport>
+
     <!-- ── Create / Edit dialog ───────────────────────────────── -->
     <v-dialog v-model="dialog.show" max-width="480" persistent scrollable>
       <v-card rounded="xl">
         <v-card-title class="pa-5 pb-2 text-body-1 font-weight-bold">
-          {{ dialog.isEdit ? 'シフトブロックを編集' : 'シフトブロックを作成' }}
-          <div class="text-caption text-medium-emphasis font-weight-regular">{{ dialogDateLabel }}</div>
+          <template v-if="dialogMode === 'template'">
+            {{ dialog.isEdit ? 'テンプレートを編集' : 'テンプレートを追加' }}
+          </template>
+          <template v-else>
+            {{ dialog.isEdit ? 'シフトブロックを編集' : 'シフトブロックを作成' }}
+            <div class="text-caption text-medium-emphasis font-weight-regular">{{ dialogDateLabel }}</div>
+          </template>
         </v-card-title>
 
         <v-divider />
@@ -267,15 +348,19 @@
         <v-divider />
 
         <v-card-actions class="pa-4">
-          <v-btn v-if="dialog.isEdit" color="error" variant="text" @click="deleteEditingEvent">削除</v-btn>
+          <v-btn v-if="dialog.isEdit && dialogMode === 'slot'" color="error" variant="text" @click="deleteEditingEvent">削除</v-btn>
+          <v-btn v-if="dialogMode === 'slot'" size="small" variant="tonal" color="secondary" rounded="lg"
+            prepend-icon="mdi-bookmark-plus-outline" @click="saveBlockToLibrary">
+            ライブラリに保存
+          </v-btn>
           <v-spacer />
           <v-btn variant="text" @click="cancelDialog">キャンセル</v-btn>
           <v-btn
             color="primary" variant="flat" rounded="lg"
             :disabled="!form.label || form.departmentConfigs.length === 0"
-            @click="saveEvent"
+            @click="dialogMode === 'template' ? saveTemplate() : saveEvent()"
           >
-            {{ dialog.isEdit ? '更新' : '作成' }}
+            {{ dialog.isEdit ? '更新' : (dialogMode === 'template' ? '追加' : '作成') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -311,12 +396,83 @@ const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
 interface TimePreset { id: string; label: string; startTime: string; endTime: string }
 const TIME_PRESETS: TimePreset[] = [
-  { id: 'asaban', label: '朝番',  startTime: '07:00', endTime: '15:00' },
-  { id: 'lunch',  label: 'ランチ', startTime: '10:00', endTime: '15:00' },
-  { id: 'yuban',  label: '夕番',  startTime: '15:00', endTime: '22:00' },
-  { id: 'toshi',  label: '通し',  startTime: '09:00', endTime: '21:00' },
-  { id: 'shinya', label: '深夜',  startTime: '22:00', endTime: '26:00' },
+  { id: 'shikomi', label: '仕込み',  startTime: '09:00', endTime: '11:00' },
+  { id: 'asaban',  label: '朝番',    startTime: '07:00', endTime: '15:00' },
+  { id: 'lunch',   label: 'ランチ',  startTime: '10:00', endTime: '15:00' },
+  { id: 'yuban',   label: '夕番',    startTime: '15:00', endTime: '22:00' },
+  { id: 'toshi',   label: '通し',    startTime: '09:00', endTime: '21:00' },
+  { id: 'close',   label: 'クローズ', startTime: '22:00', endTime: '23:30' },
+  { id: 'shinya',  label: '深夜',    startTime: '22:00', endTime: '26:00' },
 ]
+
+// ── Block Library ─────────────────────────────────────────────
+interface BlockTemplate {
+  id: string
+  label: string
+  startTime: string
+  endTime: string
+  color: SlotColor
+  departmentConfigs: DepartmentConfig[]
+}
+
+const DEFAULT_TEMPLATES: BlockTemplate[] = [
+  {
+    id: 'tpl-shikomi', label: '仕込み', startTime: '09:00', endTime: '11:00',
+    color: '#f8c076',
+    departmentConfigs: [
+      { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 1 }] },
+    ],
+  },
+  {
+    id: 'tpl-lunch', label: 'ランチ', startTime: '11:00', endTime: '15:00',
+    color: '#4bd08b',
+    departmentConfigs: [
+      { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 2 }] },
+      { department: 'ホール', roleRequirements: [{ role: 'ホールリーダー', count: 1 }, { role: 'ホールスタッフ', count: 3 }] },
+      { department: 'レジ', roleRequirements: [{ role: 'レジスタッフ', count: 1 }] },
+    ],
+  },
+  {
+    id: 'tpl-teatime', label: 'ティータイム', startTime: '15:00', endTime: '17:00',
+    color: '#9c7fe0',
+    departmentConfigs: [
+      { department: 'キッチン', roleRequirements: [{ role: 'キッチンスタッフ', count: 1 }] },
+      { department: 'ホール', roleRequirements: [{ role: 'ホールスタッフ', count: 2 }] },
+    ],
+  },
+  {
+    id: 'tpl-dinner', label: 'ディナー', startTime: '17:00', endTime: '22:00',
+    color: '#3587dc',
+    departmentConfigs: [
+      { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 3 }] },
+      { department: 'ホール', roleRequirements: [{ role: 'ホールリーダー', count: 1 }, { role: 'ホールスタッフ', count: 4 }] },
+      { department: 'レジ', roleRequirements: [{ role: 'レジスタッフ', count: 2 }] },
+    ],
+  },
+  {
+    id: 'tpl-close', label: 'クローズ', startTime: '22:00', endTime: '23:30',
+    color: '#e879a0',
+    departmentConfigs: [
+      { department: 'キッチン', roleRequirements: [{ role: 'キッチンスタッフ', count: 1 }] },
+      { department: 'ホール', roleRequirements: [{ role: 'ホールスタッフ', count: 1 }] },
+    ],
+  },
+]
+
+const libraryTemplates = ref<BlockTemplate[]>(DEFAULT_TEMPLATES.map(t => ({
+  ...t,
+  departmentConfigs: t.departmentConfigs.map(dc => ({
+    ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
+  })),
+})))
+
+interface LibraryDragState {
+  template: BlockTemplate
+  clientX: number
+  clientY: number
+  previewDate: string | null
+}
+const libraryDrag = ref<LibraryDragState | null>(null)
 
 const hourMarkers = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
 
@@ -629,6 +785,43 @@ function getEvDragPreviewStyle(): Record<string, string | number> {
   }
 }
 
+// ── Library drag ──────────────────────────────────────────────
+function onLibraryMouseDown(e: MouseEvent, template: BlockTemplate) {
+  e.preventDefault()
+  libraryDrag.value = { template, clientX: e.clientX, clientY: e.clientY, previewDate: null }
+
+  const onMove = (me: MouseEvent) => {
+    if (!libraryDrag.value) return
+    libraryDrag.value.clientX = me.clientX
+    libraryDrag.value.clientY = me.clientY
+    libraryDrag.value.previewDate = dateFromClientX(me.clientX)
+  }
+  const onUp = (me: MouseEvent) => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    const date = dateFromClientX(me.clientX)
+    if (date) applyLibraryDrop(date, template)
+    libraryDrag.value = null
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function applyLibraryDrop(date: string, template: BlockTemplate) {
+  const newSlot: ShiftSlot = {
+    id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    label: template.label,
+    startTime: template.startTime,
+    endTime: template.endTime,
+    color: template.color,
+    departmentConfigs: template.departmentConfigs.map(dc => ({
+      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
+    })),
+  }
+  localSlots.value.push(newSlot)
+  applySlotToDate(date, newSlot.id)
+}
+
 // ── Department config helpers ─────────────────────────────────
 function availableDepts(currentDept: string): string[] {
   const used = form.value.departmentConfigs.map(dc => dc.department)
@@ -651,8 +844,10 @@ function onDeptChange(idx: number, newDept: string) {
 
 // ── Dialog / Form ─────────────────────────────────────────────
 const dialog = ref({ show: false, isEdit: false })
+const dialogMode = ref<'slot' | 'template'>('slot')
 const editingSlotId = ref('')
 const editingDate = ref('')
+const editingTemplateId = ref('')
 const selectedPresetId = ref<string | null>(null)
 const dialogDateLabel = ref('')
 
@@ -682,6 +877,7 @@ function openCreateDialog() {
   editingSlotId.value = ''
   editingDate.value = drag.value.date
   dialogDateLabel.value = formatDialogDate(drag.value.date)
+  dialogMode.value = 'slot'
   dialog.value = { show: true, isEdit: false }
 }
 
@@ -699,6 +895,31 @@ function openEditDialog(slot: ShiftSlot, date: string) {
   editingSlotId.value = slot.id
   editingDate.value = date
   dialogDateLabel.value = formatDialogDate(date)
+  dialogMode.value = 'slot'
+  dialog.value = { show: true, isEdit: true }
+}
+
+function openAddTemplate() {
+  selectedPresetId.value = null
+  form.value = defaultForm()
+  editingTemplateId.value = ''
+  dialogMode.value = 'template'
+  dialog.value = { show: true, isEdit: false }
+}
+
+function openEditTemplate(tpl: BlockTemplate) {
+  selectedPresetId.value = TIME_PRESETS.find(
+    p => p.startTime === tpl.startTime && p.endTime === tpl.endTime,
+  )?.id ?? null
+  form.value = {
+    label: tpl.label, startTime: tpl.startTime, endTime: tpl.endTime,
+    color: tpl.color,
+    departmentConfigs: tpl.departmentConfigs.map(dc => ({
+      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
+    })),
+  }
+  editingTemplateId.value = tpl.id
+  dialogMode.value = 'template'
   dialog.value = { show: true, isEdit: true }
 }
 
@@ -724,6 +945,43 @@ function saveEvent() {
   }
   drag.value.active = false
   dialog.value.show = false
+}
+
+function saveTemplate() {
+  const tplData = {
+    label: form.value.label,
+    startTime: form.value.startTime,
+    endTime: form.value.endTime,
+    color: form.value.color,
+    departmentConfigs: form.value.departmentConfigs.map(dc => ({
+      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
+    })),
+  }
+  if (dialog.value.isEdit) {
+    const idx = libraryTemplates.value.findIndex(t => t.id === editingTemplateId.value)
+    if (idx !== -1) libraryTemplates.value[idx] = { id: editingTemplateId.value, ...tplData }
+  }
+  else {
+    libraryTemplates.value.push({ id: `tpl-${Date.now()}`, ...tplData })
+  }
+  dialog.value.show = false
+}
+
+function deleteTemplate(id: string) {
+  libraryTemplates.value = libraryTemplates.value.filter(t => t.id !== id)
+}
+
+function saveBlockToLibrary() {
+  libraryTemplates.value.push({
+    id: `tpl-${Date.now()}`,
+    label: form.value.label,
+    startTime: form.value.startTime,
+    endTime: form.value.endTime,
+    color: form.value.color,
+    departmentConfigs: form.value.departmentConfigs.map(dc => ({
+      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
+    })),
+  })
 }
 
 function deleteEditingEvent() {
@@ -828,4 +1086,36 @@ onMounted(() => {
 /* ── Color swatches ── */
 .color-swatch { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; transition: transform 0.15s; }
 .color-swatch:hover { transform: scale(1.18); }
+
+/* ── Block Library panel ── */
+.library-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.45); letter-spacing: 0.06em; }
+.library-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.library-scroll::-webkit-scrollbar { height: 4px; }
+.library-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
+
+.library-card {
+  display: flex; align-items: stretch; flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.10); border-radius: 8px;
+  cursor: grab; overflow: hidden; background: white;
+  min-width: 110px; position: relative;
+  transition: box-shadow 0.12s, transform 0.12s;
+}
+.library-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.14); transform: translateY(-1px); }
+.lc-bar { width: 4px; flex-shrink: 0; background: var(--tpl-color); }
+.lc-body { padding: 6px 8px 6px 6px; flex: 1; min-width: 0; }
+.lc-label { font-size: 12px; font-weight: 700; color: rgba(0,0,0,0.82); white-space: nowrap; }
+.lc-time  { font-size: 10px; color: rgba(0,0,0,0.5); white-space: nowrap; }
+.lc-depts { font-size: 10px; color: rgba(0,0,0,0.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-menu-btn { position: absolute; top: 2px; right: 2px; opacity: 0; transition: opacity 0.12s; }
+.library-card:hover .lc-menu-btn { opacity: 1; }
+
+/* ── Ghost card (follows cursor) ── */
+.library-ghost {
+  position: fixed; pointer-events: none; z-index: 9999;
+  transform: translate(-50%, -50%) rotate(3deg);
+  display: flex; align-items: stretch; border-radius: 8px;
+  overflow: hidden; width: 120px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+  background: white; opacity: 0.9;
+}
 </style>
