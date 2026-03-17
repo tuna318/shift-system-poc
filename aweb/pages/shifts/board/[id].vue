@@ -80,9 +80,6 @@
     <!-- View toggle + status legend -->
     <div class="d-flex align-center justify-space-between mb-3 flex-wrap ga-2">
       <v-btn-toggle v-model="activeView" mandatory density="compact" rounded="lg" color="primary">
-        <v-btn value="gantt" size="small" prepend-icon="mdi-table">
-          シフトボード
-        </v-btn>
         <v-btn
           value="allocation"
           size="small"
@@ -90,6 +87,12 @@
           :disabled="!board?.allocationSetup"
         >
           配置カレンダー
+        </v-btn>
+        <v-btn value="daily" size="small" prepend-icon="mdi-view-day-outline">
+          日別ビュー
+        </v-btn>
+        <v-btn value="gantt" size="small" prepend-icon="mdi-chart-gantt">
+          月間ガント
         </v-btn>
       </v-btn-toggle>
 
@@ -113,6 +116,18 @@
       :period-start="board.periodStart"
       :period-end="board.periodEnd"
     />
+
+    <!-- Daily view -->
+    <v-card v-else-if="activeView === 'daily' && board" rounded="xl" elevation="0" border>
+      <v-card-text class="pa-4">
+        <ShiftDailyView
+          :board-id="board.id"
+          :period-start="board.periodStart"
+          :period-end="board.periodEnd"
+          :entries="shiftStore.entries"
+        />
+      </v-card-text>
+    </v-card>
 
     <!-- Allocation overview calendar -->
     <v-card v-else-if="activeView === 'allocation' && board?.allocationSetup" rounded="xl" elevation="0" border>
@@ -185,7 +200,7 @@ onMounted(() => {
   shiftStore.loadBoard(boardId.value)
 })
 
-const activeView = ref<'gantt' | 'allocation'>('gantt')
+const activeView = ref<'gantt' | 'daily' | 'allocation'>('gantt')
 
 const statusLegend = [
   { status: 'SHIFT_REQUESTED',   label: 'シフト希望', color: 'transparent', borderColor: '#3587dc', textColor: '#1d4ed8' },
