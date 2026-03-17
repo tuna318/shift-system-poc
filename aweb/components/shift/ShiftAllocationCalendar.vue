@@ -15,43 +15,70 @@
       </v-btn>
     </div>
 
-    <!-- Block Library -->
-    <div class="block-library mb-3">
+    <!-- Weekly Templates -->
+    <div class="mb-3">
       <div class="d-flex align-center justify-space-between mb-2">
-        <span class="library-title">ブロックライブラリ</span>
+        <span class="section-header">週テンプレート</span>
         <v-btn size="x-small" variant="tonal" color="primary" rounded="lg"
-          prepend-icon="mdi-plus" @click="openAddTemplate">
-          カスタム追加
+          prepend-icon="mdi-plus" @click="openAddWeeklyTemplate">
+          新規作成
         </v-btn>
       </div>
-      <div class="library-scroll">
-        <div
-          v-for="tpl in libraryTemplates" :key="tpl.id"
-          class="library-card"
-          :style="{ '--tpl-color': tpl.color }"
-          @mousedown.prevent="onLibraryMouseDown($event, tpl)"
-        >
-          <div class="lc-bar" />
-          <div class="lc-body">
-            <div class="lc-label">{{ tpl.label }}</div>
-            <div class="lc-time">{{ tpl.startTime }}–{{ tpl.endTime }}</div>
-            <div class="lc-depts">{{ tpl.departmentConfigs.map(d => d.department).join('・') }}</div>
+
+      <div v-if="weeklyTemplates.length === 0" class="wt-empty">
+        週テンプレートがありません。「新規作成」で曜日ごとのパターンを登録してください。
+      </div>
+
+      <div v-else class="wt-scroll">
+        <div v-for="wt in weeklyTemplates" :key="wt.id" class="wt-card">
+          <!-- Card header -->
+          <div class="d-flex align-center justify-space-between mb-2">
+            <span class="wt-name">{{ wt.label }}</span>
+            <v-menu>
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon size="x-small" variant="text" @mousedown.stop>
+                  <v-icon size="14">mdi-dots-vertical</v-icon>
+                </v-btn>
+              </template>
+              <v-list density="compact" width="120">
+                <v-list-item title="編集" prepend-icon="mdi-pencil-outline"
+                  @click="openEditWeeklyTemplate(wt)" />
+                <v-list-item title="削除" prepend-icon="mdi-delete-outline"
+                  @click="deleteWeeklyTemplate(wt.id)" />
+              </v-list>
+            </v-menu>
           </div>
-          <v-menu>
-            <template #activator="{ props }">
-              <v-btn v-bind="props" icon size="x-small" variant="text"
-                class="lc-menu-btn" @mousedown.stop>
-                <v-icon size="14">mdi-dots-vertical</v-icon>
-              </v-btn>
-            </template>
-            <v-list density="compact" width="120">
-              <v-list-item title="編集" prepend-icon="mdi-pencil-outline"
-                @click="openEditTemplate(tpl)" />
-              <v-list-item title="削除" prepend-icon="mdi-delete-outline"
-                :disabled="libraryTemplates.length <= 1"
-                @click="deleteTemplate(tpl.id)" />
-            </v-list>
-          </v-menu>
+
+          <!-- DOW summary -->
+          <div class="wt-dow-row mb-2">
+            <div
+              v-for="dow in [0,1,2,3,4,5,6]" :key="dow"
+              class="wt-dow-cell"
+              :class="{
+                'wt-dow--weekend': dow === 0 || dow === 6,
+                'wt-dow--empty': !(wt.pattern[dow]?.length),
+              }"
+            >
+              <div class="wt-dow-label">{{ DOW_LABELS[dow] }}</div>
+              <div class="wt-dow-count">{{ wt.pattern[dow]?.length || '−' }}</div>
+              <div class="wt-dow-dots">
+                <div
+                  v-for="block in (wt.pattern[dow] ?? []).slice(0, 3)"
+                  :key="block.id"
+                  class="wt-dot"
+                  :style="{ background: block.color }"
+                />
+              </div>
+            </div>
+          </div>
+
+          <v-btn
+            size="x-small" variant="flat" color="primary" rounded="lg" block
+            :disabled="!periodStart || !periodEnd"
+            @click="triggerApplyWeeklyTemplate(wt)"
+          >
+            期間に適用
+          </v-btn>
         </div>
       </div>
     </div>
@@ -101,10 +128,9 @@
             class="day-col"
             :class="{
               'day-col--out': !day.inPeriod,
-              'day-col--drop-target': (eventDrag?.mode === 'move'
+              'day-col--drop-target': eventDrag?.mode === 'move'
                 && eventDrag.previewDate === day.date
-                && eventDrag.previewDate !== eventDrag.fromDate)
-                || (libraryDrag?.previewDate === day.date),
+                && eventDrag.previewDate !== eventDrag.fromDate,
             }"
             :style="{ height: `${TOTAL_HEIGHT}px` }"
             @mousedown.prevent="day.inPeriod ? onColMouseDown($event, day.date) : undefined"
@@ -139,7 +165,6 @@
                   </div>
                 </div>
               </template>
-              <!-- Resize handle (bottom edge) -->
               <div
                 class="resize-handle"
                 @mousedown.stop.prevent="onEventMouseDown($event, ev.slot, day.date, 'resize')"
@@ -165,51 +190,17 @@
               <div class="eb-label">{{ drag.startTime }}</div>
               <div class="eb-time">{{ drag.endTime }}</div>
             </div>
-
-            <!-- Library drag preview -->
-            <div
-              v-if="libraryDrag?.previewDate === day.date"
-              class="event-block event-block--preview"
-              :style="{
-                ...getEventStyle({ ...libraryDrag.template, id: '_preview' } as ShiftSlot),
-                opacity: 0.55,
-                border: '2px dashed rgba(255,255,255,0.7)',
-                pointerEvents: 'none',
-              }"
-            >
-              <div class="eb-label">{{ libraryDrag.template.label }}</div>
-              <div class="eb-time">{{ libraryDrag.template.startTime }}–{{ libraryDrag.template.endTime }}</div>
-            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Ghost card following cursor during library drag -->
-    <teleport to="body">
-      <div
-        v-if="libraryDrag"
-        class="library-ghost"
-        :style="{
-          left: `${libraryDrag.clientX}px`,
-          top: `${libraryDrag.clientY}px`,
-          '--tpl-color': libraryDrag.template.color,
-        }"
-      >
-        <div class="lc-bar" />
-        <div class="lc-body">
-          <div class="lc-label">{{ libraryDrag.template.label }}</div>
-          <div class="lc-time">{{ libraryDrag.template.startTime }}–{{ libraryDrag.template.endTime }}</div>
-        </div>
-      </div>
-    </teleport>
-
-    <!-- ── Create / Edit dialog ───────────────────────────────── -->
+    <!-- ── Slot / wt-block edit dialog ───────────────────────── -->
     <v-dialog v-model="dialog.show" max-width="480" persistent scrollable>
       <v-card rounded="xl">
         <v-card-title class="pa-5 pb-2 text-body-1 font-weight-bold">
-          <template v-if="dialogMode === 'template'">
-            {{ dialog.isEdit ? 'テンプレートを編集' : 'テンプレートを追加' }}
+          <template v-if="dialogMode === 'wt-block'">
+            {{ DOW_LABELS[editingWtDow] }}曜日のブロックを{{ dialog.isEdit ? '編集' : '追加' }}
           </template>
           <template v-else>
             {{ dialog.isEdit ? 'シフトブロックを編集' : 'シフトブロックを作成' }}
@@ -221,90 +212,47 @@
 
         <v-card-text class="pa-5" style="max-height: 72vh;">
 
-          <!-- ① 時間帯プリセット -->
-          <div class="section-label">時間帯</div>
+          <div class="field-label">時間帯</div>
           <v-select
             v-model="selectedPresetId"
             :items="TIME_PRESETS.map(p => ({ title: `${p.label}　${p.startTime}–${p.endTime}`, value: p.id }))"
             label="プリセットから選択（任意）"
-            clearable
-            variant="outlined"
-            density="comfortable"
-            rounded="lg"
-            prepend-inner-icon="mdi-clock-time-four-outline"
-            class="mb-4"
+            clearable variant="outlined" density="comfortable" rounded="lg"
+            prepend-inner-icon="mdi-clock-time-four-outline" class="mb-4"
             @update:model-value="onPresetSelect"
           />
 
-          <!-- ② ラベル -->
           <v-text-field
-            v-model="form.label"
-            label="ラベル"
-            placeholder="例: ランチ"
-            variant="outlined"
-            density="comfortable"
-            rounded="lg"
-            class="mb-3"
-            autofocus
+            v-model="form.label" label="ラベル" placeholder="例: ランチ"
+            variant="outlined" density="comfortable" rounded="lg" class="mb-3" autofocus
           />
 
-          <!-- ③ 開始・終了 -->
           <div class="d-flex align-center ga-2 mb-5">
-            <v-select
-              v-model="form.startTime"
-              :items="timeOptions"
-              label="開始"
-              variant="outlined"
-              density="comfortable"
-              rounded="lg"
-              hide-details
-              style="flex: 1"
-            />
+            <v-select v-model="form.startTime" :items="timeOptions" label="開始"
+              variant="outlined" density="comfortable" rounded="lg" hide-details style="flex: 1" />
             <span class="text-body-2 text-medium-emphasis flex-shrink-0">〜</span>
-            <v-select
-              v-model="form.endTime"
-              :items="timeOptions"
-              label="終了"
-              variant="outlined"
-              density="comfortable"
-              rounded="lg"
-              hide-details
-              style="flex: 1"
-            />
+            <v-select v-model="form.endTime" :items="timeOptions" label="終了"
+              variant="outlined" density="comfortable" rounded="lg" hide-details style="flex: 1" />
           </div>
 
-          <!-- ④ 部門設定 -->
           <div class="d-flex align-center justify-space-between mb-3">
-            <div class="section-label mb-0">部門設定</div>
-            <v-btn
-              size="x-small" variant="tonal" color="primary" rounded="lg" prepend-icon="mdi-plus"
+            <div class="field-label mb-0">部門設定</div>
+            <v-btn size="x-small" variant="tonal" color="primary" rounded="lg" prepend-icon="mdi-plus"
               :disabled="form.departmentConfigs.length >= ALL_DEPARTMENTS.length"
-              @click="addDepartment"
-            >
+              @click="addDepartment">
               部門を追加
             </v-btn>
           </div>
 
           <div class="d-flex flex-column ga-3 mb-5">
-            <v-card
-              v-for="(dc, idx) in form.departmentConfigs"
-              :key="idx"
-              elevation="0" border rounded="lg" class="pa-3"
-            >
+            <v-card v-for="(dc, idx) in form.departmentConfigs" :key="idx"
+              elevation="0" border rounded="lg" class="pa-3">
               <div class="d-flex align-center ga-2 mb-3">
-                <v-select
-                  :model-value="dc.department"
-                  :items="availableDepts(dc.department)"
-                  label="部門"
-                  variant="outlined" density="compact" rounded="lg" hide-details
-                  style="flex: 1"
-                  @update:model-value="onDeptChange(idx, $event)"
-                />
-                <v-btn
-                  icon size="x-small" variant="text" color="error"
-                  :disabled="form.departmentConfigs.length === 1"
-                  @click="removeDepartment(idx)"
-                >
+                <v-select :model-value="dc.department" :items="availableDepts(dc.department)"
+                  label="部門" variant="outlined" density="compact" rounded="lg" hide-details style="flex: 1"
+                  @update:model-value="onDeptChange(idx, $event)" />
+                <v-btn icon size="x-small" variant="text" color="error"
+                  :disabled="form.departmentConfigs.length === 1" @click="removeDepartment(idx)">
                   <v-icon size="16">mdi-close</v-icon>
                 </v-btn>
               </div>
@@ -327,21 +275,12 @@
             </v-card>
           </div>
 
-          <!-- ⑤ カラー -->
           <v-divider class="mb-4" />
-          <div class="section-label">カラー</div>
+          <div class="field-label">カラー</div>
           <div class="d-flex ga-2">
-            <div
-              v-for="c in SLOT_COLORS"
-              :key="c"
-              class="color-swatch"
-              :style="{
-                background: c,
-                outline: form.color === c ? `3px solid ${c}` : '3px solid transparent',
-                outlineOffset: '2px',
-              }"
-              @click="form.color = c"
-            />
+            <div v-for="c in SLOT_COLORS" :key="c" class="color-swatch"
+              :style="{ background: c, outline: form.color === c ? `3px solid ${c}` : '3px solid transparent', outlineOffset: '2px' }"
+              @click="form.color = c" />
           </div>
         </v-card-text>
 
@@ -349,19 +288,101 @@
 
         <v-card-actions class="pa-4">
           <v-btn v-if="dialog.isEdit && dialogMode === 'slot'" color="error" variant="text" @click="deleteEditingEvent">削除</v-btn>
-          <v-btn v-if="dialogMode === 'slot'" size="small" variant="tonal" color="secondary" rounded="lg"
-            prepend-icon="mdi-bookmark-plus-outline" @click="saveBlockToLibrary">
-            ライブラリに保存
+          <v-btn v-if="dialog.isEdit && dialogMode === 'wt-block'" color="error" variant="text"
+            @click="removeWtBlock(editingWtDow, editingWtBlockId); dialog.show = false">
+            削除
           </v-btn>
           <v-spacer />
           <v-btn variant="text" @click="cancelDialog">キャンセル</v-btn>
-          <v-btn
-            color="primary" variant="flat" rounded="lg"
+          <v-btn color="primary" variant="flat" rounded="lg"
             :disabled="!form.label || form.departmentConfigs.length === 0"
-            @click="dialogMode === 'template' ? saveTemplate() : saveEvent()"
-          >
-            {{ dialog.isEdit ? '更新' : (dialogMode === 'template' ? '追加' : '作成') }}
+            @click="dialogMode === 'wt-block' ? saveWtBlock() : saveEvent()">
+            {{ dialog.isEdit ? '更新' : '作成' }}
           </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── Weekly template create / edit dialog ───────────────── -->
+    <v-dialog v-model="weeklyTemplateDialog.show" max-width="520" persistent scrollable>
+      <v-card rounded="xl">
+        <v-card-title class="pa-5 pb-2 text-body-1 font-weight-bold">
+          {{ weeklyTemplateDialog.isEdit ? '週テンプレートを編集' : '週テンプレートを作成' }}
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-5" style="max-height: 70vh;">
+          <v-text-field
+            v-model="weeklyTemplateForm.label"
+            label="テンプレート名" placeholder="例: 平日パターン"
+            variant="outlined" density="comfortable" rounded="lg" class="mb-5" autofocus
+          />
+
+          <div class="field-label mb-3">曜日別ブロック設定</div>
+
+          <div class="d-flex flex-column ga-3">
+            <div v-for="dow in [1,2,3,4,5,6,0]" :key="dow" class="wt-edit-row">
+              <div class="wt-edit-dow" :class="{ 'text-error': dow === 0 || dow === 6 }">
+                {{ DOW_LABELS[dow] }}
+              </div>
+              <div class="wt-edit-chips">
+                <v-chip
+                  v-for="block in weeklyTemplateForm.pattern[dow]"
+                  :key="block.id"
+                  size="small"
+                  closable
+                  @click="openWtBlockDialog(dow, block)"
+                  @click:close="removeWtBlock(dow, block.id)"
+                >
+                  <template #prepend>
+                    <div class="wt-chip-dot" :style="{ background: block.color }" />
+                  </template>
+                  {{ block.label }}
+                </v-chip>
+                <v-btn size="x-small" variant="tonal" rounded="lg" icon
+                  @click="openWtBlockDialog(dow)">
+                  <v-icon size="14">mdi-plus</v-icon>
+                </v-btn>
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="weeklyTemplateDialog.show = false">キャンセル</v-btn>
+          <v-btn color="primary" variant="flat" rounded="lg"
+            :disabled="!weeklyTemplateForm.label.trim()"
+            @click="saveWeeklyTemplate">
+            {{ weeklyTemplateDialog.isEdit ? '更新' : '作成' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── Apply weekly template confirmation ────────────────── -->
+    <v-dialog v-model="applyWeeklyConfirm" max-width="360">
+      <v-card rounded="xl">
+        <v-card-title class="pa-5 pb-2 text-body-1 font-weight-bold">週テンプレートを適用</v-card-title>
+        <v-card-text class="pa-5 pt-2">
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            すでに配置されているブロックがあります。どのように適用しますか？
+          </p>
+          <div class="d-flex flex-column ga-2">
+            <v-btn variant="tonal" color="primary" rounded="lg" block @click="applyWeeklyTemplate(false)">
+              空白の日のみ追加
+            </v-btn>
+            <v-btn variant="tonal" color="warning" rounded="lg" block @click="applyWeeklyTemplate(true)">
+              全ての日を上書き
+            </v-btn>
+          </div>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="applyWeeklyConfirm = false">キャンセル</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -386,27 +407,25 @@ const END_HOUR = 26
 const HOUR_PX = 64
 const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_PX
 const QUARTER_PX = HOUR_PX / 4
-const GUTTER_W = 52 // px — must match .time-gutter width in CSS
+const GUTTER_W = 52
 
-const SLOT_COLORS: SlotColor[] = [
-  '#3587dc', '#4bd08b', '#f8c076', '#e879a0', '#9c7fe0', '#f97316',
-]
+const SLOT_COLORS: SlotColor[] = ['#3587dc', '#4bd08b', '#f8c076', '#e879a0', '#9c7fe0', '#f97316']
 const ALL_DEPARTMENTS = ['キッチン', 'ホール', 'レジ'] as const
 const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
 interface TimePreset { id: string; label: string; startTime: string; endTime: string }
 const TIME_PRESETS: TimePreset[] = [
-  { id: 'shikomi', label: '仕込み',  startTime: '09:00', endTime: '11:00' },
-  { id: 'asaban',  label: '朝番',    startTime: '07:00', endTime: '15:00' },
-  { id: 'lunch',   label: 'ランチ',  startTime: '10:00', endTime: '15:00' },
-  { id: 'yuban',   label: '夕番',    startTime: '15:00', endTime: '22:00' },
-  { id: 'toshi',   label: '通し',    startTime: '09:00', endTime: '21:00' },
+  { id: 'shikomi', label: '仕込み',   startTime: '09:00', endTime: '11:00' },
+  { id: 'asaban',  label: '朝番',     startTime: '07:00', endTime: '15:00' },
+  { id: 'lunch',   label: 'ランチ',   startTime: '10:00', endTime: '15:00' },
+  { id: 'yuban',   label: '夕番',     startTime: '15:00', endTime: '22:00' },
+  { id: 'toshi',   label: '通し',     startTime: '09:00', endTime: '21:00' },
   { id: 'close',   label: 'クローズ', startTime: '22:00', endTime: '23:30' },
-  { id: 'shinya',  label: '深夜',    startTime: '22:00', endTime: '26:00' },
+  { id: 'shinya',  label: '深夜',     startTime: '22:00', endTime: '26:00' },
 ]
 
-// ── Block Library ─────────────────────────────────────────────
-interface BlockTemplate {
+// ── Weekly Templates ──────────────────────────────────────────
+interface DowBlock {
   id: string
   label: string
   startTime: string
@@ -415,65 +434,242 @@ interface BlockTemplate {
   departmentConfigs: DepartmentConfig[]
 }
 
-const DEFAULT_TEMPLATES: BlockTemplate[] = [
+interface WeeklyTemplate {
+  id: string
+  label: string
+  pattern: Record<number, DowBlock[]>
+}
+
+function cloneBlock(b: DowBlock): DowBlock {
+  return {
+    ...b,
+    departmentConfigs: b.departmentConfigs.map(dc => ({
+      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
+    })),
+  }
+}
+
+function clonePattern(pattern: Record<number, DowBlock[]>): Record<number, DowBlock[]> {
+  return Object.fromEntries(
+    Object.entries(pattern).map(([k, v]) => [Number(k), v.map(cloneBlock)]),
+  ) as Record<number, DowBlock[]>
+}
+
+// Default block definitions (shared across default templates)
+const SHIKOMI = (): DowBlock => ({
+  id: `db-shikomi-${Math.random().toString(36).slice(2, 7)}`,
+  label: '仕込み', startTime: '09:00', endTime: '11:00', color: '#f8c076',
+  departmentConfigs: [
+    { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 1 }] },
+  ],
+})
+const LUNCH = (): DowBlock => ({
+  id: `db-lunch-${Math.random().toString(36).slice(2, 7)}`,
+  label: 'ランチ', startTime: '11:00', endTime: '15:00', color: '#4bd08b',
+  departmentConfigs: [
+    { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 2 }] },
+    { department: 'ホール', roleRequirements: [{ role: 'ホールリーダー', count: 1 }, { role: 'ホールスタッフ', count: 3 }] },
+    { department: 'レジ', roleRequirements: [{ role: 'レジスタッフ', count: 1 }] },
+  ],
+})
+const TEATIME = (): DowBlock => ({
+  id: `db-teatime-${Math.random().toString(36).slice(2, 7)}`,
+  label: 'ティータイム', startTime: '15:00', endTime: '17:00', color: '#9c7fe0',
+  departmentConfigs: [
+    { department: 'キッチン', roleRequirements: [{ role: 'キッチンスタッフ', count: 1 }] },
+    { department: 'ホール', roleRequirements: [{ role: 'ホールスタッフ', count: 2 }] },
+  ],
+})
+const DINNER = (): DowBlock => ({
+  id: `db-dinner-${Math.random().toString(36).slice(2, 7)}`,
+  label: 'ディナー', startTime: '17:00', endTime: '22:00', color: '#3587dc',
+  departmentConfigs: [
+    { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 3 }] },
+    { department: 'ホール', roleRequirements: [{ role: 'ホールリーダー', count: 1 }, { role: 'ホールスタッフ', count: 4 }] },
+    { department: 'レジ', roleRequirements: [{ role: 'レジスタッフ', count: 2 }] },
+  ],
+})
+const CLOSE = (): DowBlock => ({
+  id: `db-close-${Math.random().toString(36).slice(2, 7)}`,
+  label: 'クローズ', startTime: '22:00', endTime: '23:30', color: '#e879a0',
+  departmentConfigs: [
+    { department: 'キッチン', roleRequirements: [{ role: 'キッチンスタッフ', count: 1 }] },
+    { department: 'ホール', roleRequirements: [{ role: 'ホールスタッフ', count: 1 }] },
+  ],
+})
+
+const DEFAULT_WEEKLY_TEMPLATES: WeeklyTemplate[] = [
   {
-    id: 'tpl-shikomi', label: '仕込み', startTime: '09:00', endTime: '11:00',
-    color: '#f8c076',
-    departmentConfigs: [
-      { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 1 }] },
-    ],
+    id: 'wt-standard',
+    label: '標準パターン',
+    pattern: {
+      0: [LUNCH(), DINNER()],
+      1: [SHIKOMI(), LUNCH(), DINNER()],
+      2: [SHIKOMI(), LUNCH(), DINNER()],
+      3: [SHIKOMI(), LUNCH(), DINNER()],
+      4: [SHIKOMI(), LUNCH(), DINNER()],
+      5: [SHIKOMI(), LUNCH(), DINNER()],
+      6: [LUNCH(), TEATIME(), DINNER()],
+    },
   },
   {
-    id: 'tpl-lunch', label: 'ランチ', startTime: '11:00', endTime: '15:00',
-    color: '#4bd08b',
-    departmentConfigs: [
-      { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 2 }] },
-      { department: 'ホール', roleRequirements: [{ role: 'ホールリーダー', count: 1 }, { role: 'ホールスタッフ', count: 3 }] },
-      { department: 'レジ', roleRequirements: [{ role: 'レジスタッフ', count: 1 }] },
-    ],
-  },
-  {
-    id: 'tpl-teatime', label: 'ティータイム', startTime: '15:00', endTime: '17:00',
-    color: '#9c7fe0',
-    departmentConfigs: [
-      { department: 'キッチン', roleRequirements: [{ role: 'キッチンスタッフ', count: 1 }] },
-      { department: 'ホール', roleRequirements: [{ role: 'ホールスタッフ', count: 2 }] },
-    ],
-  },
-  {
-    id: 'tpl-dinner', label: 'ディナー', startTime: '17:00', endTime: '22:00',
-    color: '#3587dc',
-    departmentConfigs: [
-      { department: 'キッチン', roleRequirements: [{ role: 'キッチンリーダー', count: 1 }, { role: 'キッチンスタッフ', count: 3 }] },
-      { department: 'ホール', roleRequirements: [{ role: 'ホールリーダー', count: 1 }, { role: 'ホールスタッフ', count: 4 }] },
-      { department: 'レジ', roleRequirements: [{ role: 'レジスタッフ', count: 2 }] },
-    ],
-  },
-  {
-    id: 'tpl-close', label: 'クローズ', startTime: '22:00', endTime: '23:30',
-    color: '#e879a0',
-    departmentConfigs: [
-      { department: 'キッチン', roleRequirements: [{ role: 'キッチンスタッフ', count: 1 }] },
-      { department: 'ホール', roleRequirements: [{ role: 'ホールスタッフ', count: 1 }] },
-    ],
+    id: 'wt-full',
+    label: 'フルパターン',
+    pattern: {
+      0: [LUNCH(), TEATIME(), DINNER()],
+      1: [SHIKOMI(), LUNCH(), TEATIME(), DINNER(), CLOSE()],
+      2: [SHIKOMI(), LUNCH(), TEATIME(), DINNER(), CLOSE()],
+      3: [SHIKOMI(), LUNCH(), TEATIME(), DINNER(), CLOSE()],
+      4: [SHIKOMI(), LUNCH(), TEATIME(), DINNER(), CLOSE()],
+      5: [SHIKOMI(), LUNCH(), TEATIME(), DINNER(), CLOSE()],
+      6: [LUNCH(), TEATIME(), DINNER(), CLOSE()],
+    },
   },
 ]
 
-const libraryTemplates = ref<BlockTemplate[]>(DEFAULT_TEMPLATES.map(t => ({
-  ...t,
-  departmentConfigs: t.departmentConfigs.map(dc => ({
-    ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
-  })),
-})))
+const weeklyTemplates = ref<WeeklyTemplate[]>(
+  DEFAULT_WEEKLY_TEMPLATES.map(wt => ({ ...wt, pattern: clonePattern(wt.pattern) })),
+)
 
-interface LibraryDragState {
-  template: BlockTemplate
-  clientX: number
-  clientY: number
-  previewDate: string | null
+const weeklyTemplateDialog = ref({ show: false, isEdit: false })
+const editingWeeklyTemplateId = ref('')
+const weeklyTemplateForm = ref<{ label: string; pattern: Record<number, DowBlock[]> }>({
+  label: '',
+  pattern: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
+})
+const applyWeeklyConfirm = ref(false)
+const pendingApplyWt = ref<WeeklyTemplate | null>(null)
+
+// wt-block editing state
+const editingWtDow = ref(0)
+const editingWtBlockId = ref('')
+
+function openAddWeeklyTemplate() {
+  weeklyTemplateForm.value = { label: '', pattern: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] } }
+  editingWeeklyTemplateId.value = ''
+  weeklyTemplateDialog.value = { show: true, isEdit: false }
 }
-const libraryDrag = ref<LibraryDragState | null>(null)
 
+function openEditWeeklyTemplate(wt: WeeklyTemplate) {
+  weeklyTemplateForm.value = { label: wt.label, pattern: clonePattern(wt.pattern) }
+  editingWeeklyTemplateId.value = wt.id
+  weeklyTemplateDialog.value = { show: true, isEdit: true }
+}
+
+function saveWeeklyTemplate() {
+  const data = { label: weeklyTemplateForm.value.label, pattern: clonePattern(weeklyTemplateForm.value.pattern) }
+  if (weeklyTemplateDialog.value.isEdit) {
+    const idx = weeklyTemplates.value.findIndex(wt => wt.id === editingWeeklyTemplateId.value)
+    if (idx !== -1) weeklyTemplates.value[idx] = { id: editingWeeklyTemplateId.value, ...data }
+  }
+  else {
+    weeklyTemplates.value.push({ id: `wt-${Date.now()}`, ...data })
+  }
+  weeklyTemplateDialog.value.show = false
+}
+
+function deleteWeeklyTemplate(id: string) {
+  weeklyTemplates.value = weeklyTemplates.value.filter(wt => wt.id !== id)
+}
+
+function openWtBlockDialog(dow: number, block?: DowBlock) {
+  editingWtDow.value = dow
+  editingWtBlockId.value = block?.id ?? ''
+  selectedPresetId.value = block
+    ? (TIME_PRESETS.find(p => p.startTime === block.startTime && p.endTime === block.endTime)?.id ?? null)
+    : null
+  form.value = block
+    ? cloneBlock(block)
+    : defaultForm()
+  dialogMode.value = 'wt-block'
+  dialog.value = { show: true, isEdit: !!block }
+}
+
+function saveWtBlock() {
+  const blockData: DowBlock = {
+    id: editingWtBlockId.value || `b-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+    label: form.value.label,
+    startTime: form.value.startTime,
+    endTime: form.value.endTime,
+    color: form.value.color,
+    departmentConfigs: form.value.departmentConfigs.map(dc => ({
+      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
+    })),
+  }
+  const dow = editingWtDow.value
+  if (dialog.value.isEdit) {
+    const idx = weeklyTemplateForm.value.pattern[dow].findIndex(b => b.id === editingWtBlockId.value)
+    if (idx !== -1) weeklyTemplateForm.value.pattern[dow][idx] = blockData
+  }
+  else {
+    weeklyTemplateForm.value.pattern[dow] = [...weeklyTemplateForm.value.pattern[dow], blockData]
+  }
+  dialog.value.show = false
+}
+
+function removeWtBlock(dow: number, blockId: string) {
+  weeklyTemplateForm.value.pattern[dow] = weeklyTemplateForm.value.pattern[dow].filter(b => b.id !== blockId)
+}
+
+function triggerApplyWeeklyTemplate(wt: WeeklyTemplate) {
+  pendingApplyWt.value = wt
+  const hasBlocks = localAssignments.value.some(a => a.slotIds.length > 0)
+  if (hasBlocks) {
+    applyWeeklyConfirm.value = true
+  }
+  else {
+    applyWeeklyTemplate(false)
+  }
+}
+
+function applyWeeklyTemplate(overwrite: boolean) {
+  const wt = pendingApplyWt.value
+  if (!wt || !props.periodStart || !props.periodEnd) return
+
+  // One shared slot per (DOW × block id) — reused across all matching days
+  const sharedSlotMap = new Map<string, string>()   // `${dow}:${block.id}` → slotId
+
+  const end = new Date(props.periodEnd)
+  for (let d = new Date(props.periodStart); d <= end; d.setDate(d.getDate() + 1)) {
+    const date = d.toISOString().slice(0, 10)
+    const dow = d.getDay()
+    const blocks = wt.pattern[dow] ?? []
+    if (blocks.length === 0) continue
+
+    const existing = localAssignments.value.find(a => a.date === date)
+    if (!overwrite && existing && existing.slotIds.length > 0) continue
+
+    if (overwrite) {
+      const aIdx = localAssignments.value.findIndex(a => a.date === date)
+      if (aIdx !== -1) localAssignments.value[aIdx].slotIds = []
+    }
+
+    for (const block of blocks) {
+      const key = `${dow}:${block.id}`
+      let slotId = sharedSlotMap.get(key)
+      if (!slotId) {
+        slotId = `slot-wt-${dow}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`
+        localSlots.value.push({
+          id: slotId,
+          label: block.label,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          color: block.color,
+          departmentConfigs: block.departmentConfigs.map(dc => ({
+            ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
+          })),
+        })
+        sharedSlotMap.set(key, slotId)
+      }
+      applySlotToDate(date, slotId)
+    }
+  }
+
+  applyWeeklyConfirm.value = false
+  pendingApplyWt.value = null
+}
+
+// ── Other constants ───────────────────────────────────────────
 const hourMarkers = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
 
 const timeOptions = computed(() => {
@@ -498,13 +694,11 @@ function getRolesForDept(dept: string): string[] {
 // ── Period helpers ────────────────────────────────────────────
 const effectiveStart = computed(() => {
   if (props.periodStart) return props.periodStart
-  const d = new Date(); d.setDate(1)
-  return d.toISOString().slice(0, 10)
+  const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10)
 })
 const effectiveEnd = computed(() => {
   if (props.periodEnd) return props.periodEnd
-  const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(0)
-  return d.toISOString().slice(0, 10)
+  const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(0); return d.toISOString().slice(0, 10)
 })
 
 // ── Local state ───────────────────────────────────────────────
@@ -557,7 +751,7 @@ const canGoNext = computed(() => {
 function prevWeek() { const d = new Date(weekStart.value); d.setDate(d.getDate() - 7); weekStart.value = d }
 function nextWeek() { const d = new Date(weekStart.value); d.setDate(d.getDate() + 7); weekStart.value = d }
 
-// ── Time ↔ pixel / minute helpers ────────────────────────────
+// ── Time helpers ──────────────────────────────────────────────
 function timeToY(time: string): number {
   const [h, m] = time.split(':').map(Number)
   return ((h - START_HOUR) * 60 + m) * (HOUR_PX / 60)
@@ -595,14 +789,7 @@ function getEventStyle(slot: ShiftSlot): Record<string, string | number> {
   const top = timeToY(slot.startTime)
   const height = Math.max(timeToY(slot.endTime) - top, QUARTER_PX)
   const isDragging = eventDrag.value?.slotId === slot.id
-  return {
-    top: `${top}px`,
-    height: `${height}px`,
-    background: slot.color,
-    opacity: isDragging ? 0.3 : 1,
-    cursor: 'grab',
-    zIndex: isDragging ? 0 : 1,
-  }
+  return { top: `${top}px`, height: `${height}px`, background: slot.color, opacity: isDragging ? 0.3 : 1, cursor: 'grab', zIndex: isDragging ? 0 : 1 }
 }
 
 function getSlotById(id: string) { return localSlots.value.find(s => s.id === id) }
@@ -620,7 +807,7 @@ function removeEvent(slotId: string, date: string) {
     localSlots.value = localSlots.value.filter(s => s.id !== slotId)
 }
 
-// ── New-event drag (column background drag) ───────────────────
+// ── New-event drag ────────────────────────────────────────────
 const scrollRef = ref<HTMLElement>()
 const calBodyRef = ref<HTMLElement>()
 const drag = ref({ active: false, date: '', startY: 0, endY: 0, startTime: '', endTime: '' })
@@ -655,20 +842,12 @@ function getNewDragStyle(): Record<string, string | number> {
 
 // ── Event drag (move & resize) ────────────────────────────────
 interface EventDragState {
-  slotId: string
-  fromDate: string
-  origStartTime: string
-  origEndTime: string
-  startClientY: number
-  startClientX: number
-  previewDate: string
-  previewStartTime: string
-  previewEndTime: string
-  mode: 'move' | 'resize'
+  slotId: string; fromDate: string; origStartTime: string; origEndTime: string
+  startClientY: number; startClientX: number; previewDate: string
+  previewStartTime: string; previewEndTime: string; mode: 'move' | 'resize'
 }
 const eventDrag = ref<EventDragState | null>(null)
 
-/** Resolve which in-period date column the cursor X is over. */
 function dateFromClientX(clientX: number): string | null {
   const body = calBodyRef.value; if (!body) return null
   const rect = body.getBoundingClientRect()
@@ -682,86 +861,43 @@ function dateFromClientX(clientX: number): string | null {
 
 function onEventMouseDown(e: MouseEvent, slot: ShiftSlot, date: string, mode: 'move' | 'resize') {
   const scrollEl = scrollRef.value; if (!scrollEl) return
-  const startClientY = e.clientY
-  const startClientX = e.clientX
-  let hasDragged = false
-
-  const getScrollY = (clientY: number) =>
-    clamp(clientY - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop, 0, TOTAL_HEIGHT)
-
+  const startClientY = e.clientY; const startClientX = e.clientX; let hasDragged = false
+  const getScrollY = (y: number) => clamp(y - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop, 0, TOTAL_HEIGHT)
   const onMove = (me: MouseEvent) => {
-    const dxAbs = Math.abs(me.clientX - startClientX)
-    const dyAbs = Math.abs(me.clientY - startClientY)
-    if (!hasDragged && (dxAbs > 4 || dyAbs > 4)) {
+    if (!hasDragged && (Math.abs(me.clientX - startClientX) > 4 || Math.abs(me.clientY - startClientY) > 4)) {
       hasDragged = true
-      eventDrag.value = {
-        slotId: slot.id,
-        fromDate: date,
-        origStartTime: slot.startTime,
-        origEndTime: slot.endTime,
-        startClientY,
-        startClientX,
-        previewDate: date,
-        previewStartTime: slot.startTime,
-        previewEndTime: slot.endTime,
-        mode,
-      }
+      eventDrag.value = { slotId: slot.id, fromDate: date, origStartTime: slot.startTime, origEndTime: slot.endTime, startClientY, startClientX, previewDate: date, previewStartTime: slot.startTime, previewEndTime: slot.endTime, mode }
     }
     if (!hasDragged || !eventDrag.value) return
-
     const MAX_MIN = (END_HOUR - START_HOUR) * 60
-    const rawDelta = ((me.clientY - startClientY) / HOUR_PX) * 60
-    const deltaMin = snapMin(rawDelta)
-
+    const deltaMin = snapMin(((me.clientY - startClientY) / HOUR_PX) * 60)
     if (mode === 'move') {
-      const origStart = timeToMin(slot.startTime)
-      const origEnd = timeToMin(slot.endTime)
-      const dur = origEnd - origStart
+      const origStart = timeToMin(slot.startTime); const dur = timeToMin(slot.endTime) - origStart
       const newStart = clamp(origStart + deltaMin, 0, MAX_MIN - dur)
-      eventDrag.value.previewStartTime = minToTime(newStart)
-      eventDrag.value.previewEndTime = minToTime(newStart + dur)
-      // Horizontal: detect target date column
+      eventDrag.value.previewStartTime = minToTime(newStart); eventDrag.value.previewEndTime = minToTime(newStart + dur)
       const targetDate = dateFromClientX(me.clientX)
       if (targetDate) eventDrag.value.previewDate = targetDate
     }
     else {
-      // resize: only vertical, only endTime changes
-      const origEnd = timeToMin(slot.endTime)
-      const origStart = timeToMin(slot.startTime)
-      const newEnd = clamp(origEnd + deltaMin, origStart + 15, MAX_MIN)
+      const newEnd = clamp(timeToMin(slot.endTime) + deltaMin, timeToMin(slot.startTime) + 15, MAX_MIN)
       eventDrag.value.previewEndTime = minToTime(newEnd)
     }
   }
-
   const onUp = () => {
     document.removeEventListener('mousemove', onMove)
     document.removeEventListener('mouseup', onUp)
-    if (hasDragged && eventDrag.value) {
-      commitEventDrag()
-    }
-    else {
-      openEditDialog(slot, date)
-    }
+    if (hasDragged && eventDrag.value) commitEventDrag()
+    else openEditDialog(slot, date)
     eventDrag.value = null
   }
-
   document.addEventListener('mousemove', onMove)
   document.addEventListener('mouseup', onUp)
 }
 
 function commitEventDrag() {
   const ed = eventDrag.value; if (!ed) return
-  const idx = localSlots.value.findIndex(s => s.id === ed.slotId)
-  if (idx === -1) return
-
-  // Update the slot's times
-  localSlots.value[idx] = {
-    ...localSlots.value[idx],
-    startTime: ed.previewStartTime,
-    endTime: ed.previewEndTime,
-  }
-
-  // If moved to a different date, transfer the assignment
+  const idx = localSlots.value.findIndex(s => s.id === ed.slotId); if (idx === -1) return
+  localSlots.value[idx] = { ...localSlots.value[idx], startTime: ed.previewStartTime, endTime: ed.previewEndTime }
   if (ed.mode === 'move' && ed.previewDate !== ed.fromDate) {
     const fromA = localAssignments.value.find(a => a.date === ed.fromDate)
     if (fromA) fromA.slotIds = fromA.slotIds.filter(id => id !== ed.slotId)
@@ -773,53 +909,7 @@ function getEvDragPreviewStyle(): Record<string, string | number> {
   const ed = eventDrag.value; if (!ed) return {}
   const top = timeToY(ed.previewStartTime)
   const height = Math.max(timeToY(ed.previewEndTime) - top, QUARTER_PX)
-  const slot = getSlotById(ed.slotId)
-  return {
-    top: `${top}px`,
-    height: `${height}px`,
-    background: slot?.color ?? '#3587dc',
-    opacity: 0.75,
-    border: '2px solid rgba(255,255,255,0.55)',
-    zIndex: 3,
-    pointerEvents: 'none',
-  }
-}
-
-// ── Library drag ──────────────────────────────────────────────
-function onLibraryMouseDown(e: MouseEvent, template: BlockTemplate) {
-  e.preventDefault()
-  libraryDrag.value = { template, clientX: e.clientX, clientY: e.clientY, previewDate: null }
-
-  const onMove = (me: MouseEvent) => {
-    if (!libraryDrag.value) return
-    libraryDrag.value.clientX = me.clientX
-    libraryDrag.value.clientY = me.clientY
-    libraryDrag.value.previewDate = dateFromClientX(me.clientX)
-  }
-  const onUp = (me: MouseEvent) => {
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
-    const date = dateFromClientX(me.clientX)
-    if (date) applyLibraryDrop(date, template)
-    libraryDrag.value = null
-  }
-  document.addEventListener('mousemove', onMove)
-  document.addEventListener('mouseup', onUp)
-}
-
-function applyLibraryDrop(date: string, template: BlockTemplate) {
-  const newSlot: ShiftSlot = {
-    id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    label: template.label,
-    startTime: template.startTime,
-    endTime: template.endTime,
-    color: template.color,
-    departmentConfigs: template.departmentConfigs.map(dc => ({
-      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
-    })),
-  }
-  localSlots.value.push(newSlot)
-  applySlotToDate(date, newSlot.id)
+  return { top: `${top}px`, height: `${height}px`, background: getSlotById(ed.slotId)?.color ?? '#3587dc', opacity: 0.75, border: '2px solid rgba(255,255,255,0.55)', zIndex: 3, pointerEvents: 'none' }
 }
 
 // ── Department config helpers ─────────────────────────────────
@@ -831,8 +921,7 @@ function makeDeptConfig(dept: string): DepartmentConfig {
   return { department: dept, roleRequirements: getRolesForDept(dept).map(role => ({ role, count: 0 })) }
 }
 function addDepartment() {
-  const used = form.value.departmentConfigs.map(dc => dc.department)
-  const next = ALL_DEPARTMENTS.find(d => !used.includes(d))
+  const next = ALL_DEPARTMENTS.find(d => !form.value.departmentConfigs.map(dc => dc.department).includes(d))
   if (next) form.value.departmentConfigs.push(makeDeptConfig(next))
 }
 function removeDepartment(idx: number) {
@@ -844,10 +933,9 @@ function onDeptChange(idx: number, newDept: string) {
 
 // ── Dialog / Form ─────────────────────────────────────────────
 const dialog = ref({ show: false, isEdit: false })
-const dialogMode = ref<'slot' | 'template'>('slot')
+const dialogMode = ref<'slot' | 'wt-block'>('slot')
 const editingSlotId = ref('')
 const editingDate = ref('')
-const editingTemplateId = ref('')
 const selectedPresetId = ref<string | null>(null)
 const dialogDateLabel = ref('')
 
@@ -855,7 +943,6 @@ interface FormState {
   label: string; startTime: string; endTime: string
   color: SlotColor; departmentConfigs: DepartmentConfig[]
 }
-
 const defaultForm = (): FormState => ({
   label: '',
   startTime: drag.value.startTime || '10:00',
@@ -872,116 +959,33 @@ function onPresetSelect(presetId: string | null) {
 }
 
 function openCreateDialog() {
-  selectedPresetId.value = null
-  form.value = defaultForm()
-  editingSlotId.value = ''
-  editingDate.value = drag.value.date
+  selectedPresetId.value = null; form.value = defaultForm()
+  editingSlotId.value = ''; editingDate.value = drag.value.date
   dialogDateLabel.value = formatDialogDate(drag.value.date)
-  dialogMode.value = 'slot'
-  dialog.value = { show: true, isEdit: false }
+  dialogMode.value = 'slot'; dialog.value = { show: true, isEdit: false }
 }
 
 function openEditDialog(slot: ShiftSlot, date: string) {
-  selectedPresetId.value = TIME_PRESETS.find(
-    p => p.startTime === slot.startTime && p.endTime === slot.endTime,
-  )?.id ?? null
-  form.value = {
-    label: slot.label, startTime: slot.startTime, endTime: slot.endTime, color: slot.color,
-    departmentConfigs: slot.departmentConfigs.map(dc => ({
-      department: dc.department,
-      roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
-    })),
-  }
-  editingSlotId.value = slot.id
-  editingDate.value = date
+  selectedPresetId.value = TIME_PRESETS.find(p => p.startTime === slot.startTime && p.endTime === slot.endTime)?.id ?? null
+  form.value = { label: slot.label, startTime: slot.startTime, endTime: slot.endTime, color: slot.color, departmentConfigs: slot.departmentConfigs.map(dc => ({ department: dc.department, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })) })) }
+  editingSlotId.value = slot.id; editingDate.value = date
   dialogDateLabel.value = formatDialogDate(date)
-  dialogMode.value = 'slot'
-  dialog.value = { show: true, isEdit: true }
-}
-
-function openAddTemplate() {
-  selectedPresetId.value = null
-  form.value = defaultForm()
-  editingTemplateId.value = ''
-  dialogMode.value = 'template'
-  dialog.value = { show: true, isEdit: false }
-}
-
-function openEditTemplate(tpl: BlockTemplate) {
-  selectedPresetId.value = TIME_PRESETS.find(
-    p => p.startTime === tpl.startTime && p.endTime === tpl.endTime,
-  )?.id ?? null
-  form.value = {
-    label: tpl.label, startTime: tpl.startTime, endTime: tpl.endTime,
-    color: tpl.color,
-    departmentConfigs: tpl.departmentConfigs.map(dc => ({
-      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
-    })),
-  }
-  editingTemplateId.value = tpl.id
-  dialogMode.value = 'template'
-  dialog.value = { show: true, isEdit: true }
+  dialogMode.value = 'slot'; dialog.value = { show: true, isEdit: true }
 }
 
 function cancelDialog() { drag.value.active = false; dialog.value.show = false }
 
 function saveEvent() {
-  const slotData: Omit<ShiftSlot, 'id'> = {
-    label: form.value.label, startTime: form.value.startTime, endTime: form.value.endTime,
-    color: form.value.color,
-    departmentConfigs: form.value.departmentConfigs.map(dc => ({
-      department: dc.department,
-      roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
-    })),
-  }
+  const slotData: Omit<ShiftSlot, 'id'> = { label: form.value.label, startTime: form.value.startTime, endTime: form.value.endTime, color: form.value.color, departmentConfigs: form.value.departmentConfigs.map(dc => ({ department: dc.department, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })) })) }
   if (dialog.value.isEdit) {
     const idx = localSlots.value.findIndex(s => s.id === editingSlotId.value)
     if (idx !== -1) localSlots.value[idx] = { id: editingSlotId.value, ...slotData }
   }
   else {
     const newSlot: ShiftSlot = { id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ...slotData }
-    localSlots.value.push(newSlot)
-    applySlotToDate(editingDate.value, newSlot.id)
+    localSlots.value.push(newSlot); applySlotToDate(editingDate.value, newSlot.id)
   }
-  drag.value.active = false
-  dialog.value.show = false
-}
-
-function saveTemplate() {
-  const tplData = {
-    label: form.value.label,
-    startTime: form.value.startTime,
-    endTime: form.value.endTime,
-    color: form.value.color,
-    departmentConfigs: form.value.departmentConfigs.map(dc => ({
-      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
-    })),
-  }
-  if (dialog.value.isEdit) {
-    const idx = libraryTemplates.value.findIndex(t => t.id === editingTemplateId.value)
-    if (idx !== -1) libraryTemplates.value[idx] = { id: editingTemplateId.value, ...tplData }
-  }
-  else {
-    libraryTemplates.value.push({ id: `tpl-${Date.now()}`, ...tplData })
-  }
-  dialog.value.show = false
-}
-
-function deleteTemplate(id: string) {
-  libraryTemplates.value = libraryTemplates.value.filter(t => t.id !== id)
-}
-
-function saveBlockToLibrary() {
-  libraryTemplates.value.push({
-    id: `tpl-${Date.now()}`,
-    label: form.value.label,
-    startTime: form.value.startTime,
-    endTime: form.value.endTime,
-    color: form.value.color,
-    departmentConfigs: form.value.departmentConfigs.map(dc => ({
-      ...dc, roleRequirements: dc.roleRequirements.map(rr => ({ ...rr })),
-    })),
-  })
+  drag.value.active = false; dialog.value.show = false
 }
 
 function deleteEditingEvent() {
@@ -1004,16 +1008,15 @@ onMounted(() => {
 .is-ev-dragging,
 .is-ev-dragging * { cursor: grabbing !important; }
 
-/* ── Frame ── */
-.cal-frame { border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; overflow: hidden; }
+/* ── Shared panel header ── */
+.section-header { font-size: 11px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.45); letter-spacing: 0.06em; }
 
-/* ── Header ── */
+/* ── Calendar frame ── */
+.cal-frame { border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; overflow: hidden; }
 .cal-header { display: flex; border-bottom: 1px solid rgba(0,0,0,0.1); background: rgba(0,0,0,0.015); }
 .time-gutter { width: 52px; flex-shrink: 0; }
 .day-header-cell { flex: 1; text-align: center; padding: 8px 4px; border-left: 1px solid rgba(0,0,0,0.06); }
 .day-header-cell--out { opacity: 0.3; }
-
-/* ── Scroll area ── */
 .cal-scroll { overflow-y: auto; max-height: 560px; }
 .cal-body { display: flex; position: relative; }
 .hour-label { position: absolute; right: 6px; font-size: 10px; color: rgba(0,0,0,0.38); white-space: nowrap; line-height: 1; }
@@ -1027,27 +1030,15 @@ onMounted(() => {
 
 /* ── Event blocks ── */
 .event-block {
-  position: absolute; left: 3px; right: 3px;
-  border-radius: 6px; overflow: visible;
-  padding: 5px 7px 12px; /* bottom pad for resize handle */
-  cursor: grab; z-index: 1; transition: opacity 0.12s, box-shadow 0.12s;
+  position: absolute; left: 3px; right: 3px; border-radius: 6px; overflow: visible;
+  padding: 5px 7px 12px; cursor: grab; z-index: 1; transition: opacity 0.12s, box-shadow 0.12s;
 }
-.event-block:not(.event-block--dragging):not(.event-block--preview):not(.event-block--ev-preview):hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-}
+.event-block:not(.event-block--dragging):not(.event-block--preview):not(.event-block--ev-preview):hover { box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
 .event-block--dragging { cursor: grabbing; }
 .event-block--preview { cursor: default; pointer-events: none; }
 .event-block--ev-preview { cursor: grabbing; pointer-events: none; border-radius: 6px; overflow: hidden; }
-
-.event-remove {
-  position: absolute; top: 4px; right: 4px; width: 16px; height: 16px;
-  border-radius: 50%; border: none; background: rgba(0,0,0,0.25); color: white;
-  font-size: 11px; cursor: pointer; display: flex; align-items: center;
-  justify-content: center; padding: 0; line-height: 1; transition: background 0.12s;
-}
+.event-remove { position: absolute; top: 4px; right: 4px; width: 16px; height: 16px; border-radius: 50%; border: none; background: rgba(0,0,0,0.25); color: white; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; transition: background 0.12s; }
 .event-remove:hover { background: rgba(0,0,0,0.5); }
-
-/* Event content */
 .eb-label { color: white; font-size: 12px; font-weight: 700; line-height: 1.3; padding-right: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eb-time  { color: rgba(255,255,255,0.75); font-size: 10px; line-height: 1.4; margin-bottom: 4px; }
 .eb-dept-block { margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.18); }
@@ -1055,25 +1046,12 @@ onMounted(() => {
 .eb-role-row { display: flex; align-items: center; justify-content: space-between; line-height: 1.5; }
 .eb-role-name { color: rgba(255,255,255,0.9); font-size: 10px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eb-role-badge { background: rgba(0,0,0,0.22); color: white; font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 4px; flex-shrink: 0; margin-left: 4px; }
-
-/* ── Resize handle ── */
-.resize-handle {
-  position: absolute; bottom: 0; left: 0; right: 0; height: 10px;
-  cursor: ns-resize; display: flex; align-items: center; justify-content: center;
-  border-radius: 0 0 6px 6px;
-  background: rgba(0,0,0,0.15);
-  opacity: 0; transition: opacity 0.15s;
-}
-.resize-handle::after {
-  content: ''; display: block; width: 22px; height: 2px;
-  background: rgba(255,255,255,0.7); border-radius: 1px;
-}
+.resize-handle { position: absolute; bottom: 0; left: 0; right: 0; height: 10px; cursor: ns-resize; display: flex; align-items: center; justify-content: center; border-radius: 0 0 6px 6px; background: rgba(0,0,0,0.15); opacity: 0; transition: opacity 0.15s; }
+.resize-handle::after { content: ''; display: block; width: 22px; height: 2px; background: rgba(255,255,255,0.7); border-radius: 1px; }
 .event-block:hover .resize-handle { opacity: 1; }
 
 /* ── Dialog ── */
-.section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.45); letter-spacing: 0.06em; margin-bottom: 8px; }
-
-/* ── Role stepper ── */
+.field-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.45); letter-spacing: 0.06em; margin-bottom: 8px; }
 .role-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
 .role-row:last-child { border-bottom: none; }
 .role-name { flex: 1; font-size: 13px; }
@@ -1082,40 +1060,38 @@ onMounted(() => {
 .stepper-btn:hover:not(:disabled) { background: rgba(0,0,0,0.06); }
 .stepper-btn:disabled { opacity: 0.3; cursor: default; }
 .stepper-val { min-width: 24px; text-align: center; font-size: 14px; font-weight: 600; }
-
-/* ── Color swatches ── */
 .color-swatch { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; transition: transform 0.15s; }
 .color-swatch:hover { transform: scale(1.18); }
 
-/* ── Block Library panel ── */
-.library-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.45); letter-spacing: 0.06em; }
-.library-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-.library-scroll::-webkit-scrollbar { height: 4px; }
-.library-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
+/* ── Weekly Templates ── */
+.wt-empty { font-size: 12px; color: rgba(0,0,0,0.38); padding: 8px 0; }
 
-.library-card {
-  display: flex; align-items: stretch; flex-shrink: 0;
-  border: 1px solid rgba(0,0,0,0.10); border-radius: 8px;
-  cursor: grab; overflow: hidden; background: white;
-  min-width: 110px; position: relative;
-  transition: box-shadow 0.12s, transform 0.12s;
-}
-.library-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.14); transform: translateY(-1px); }
-.lc-bar { width: 4px; flex-shrink: 0; background: var(--tpl-color); }
-.lc-body { padding: 6px 8px 6px 6px; flex: 1; min-width: 0; }
-.lc-label { font-size: 12px; font-weight: 700; color: rgba(0,0,0,0.82); white-space: nowrap; }
-.lc-time  { font-size: 10px; color: rgba(0,0,0,0.5); white-space: nowrap; }
-.lc-depts { font-size: 10px; color: rgba(0,0,0,0.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lc-menu-btn { position: absolute; top: 2px; right: 2px; opacity: 0; transition: opacity 0.12s; }
-.library-card:hover .lc-menu-btn { opacity: 1; }
+.wt-scroll { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.wt-scroll::-webkit-scrollbar { height: 4px; }
+.wt-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
 
-/* ── Ghost card (follows cursor) ── */
-.library-ghost {
-  position: fixed; pointer-events: none; z-index: 9999;
-  transform: translate(-50%, -50%) rotate(3deg);
-  display: flex; align-items: stretch; border-radius: 8px;
-  overflow: hidden; width: 120px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-  background: white; opacity: 0.9;
+.wt-card {
+  flex-shrink: 0; min-width: 190px;
+  border: 1px solid rgba(0,0,0,0.10); border-radius: 10px;
+  background: white; padding: 10px 10px 8px;
+  transition: box-shadow 0.12s;
 }
+.wt-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.10); }
+.wt-name { font-size: 13px; font-weight: 700; color: rgba(0,0,0,0.82); }
+
+.wt-dow-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.wt-dow-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.wt-dow-label { font-size: 10px; font-weight: 600; color: rgba(0,0,0,0.4); line-height: 1; }
+.wt-dow-count { font-size: 14px; font-weight: 700; color: rgba(0,0,0,0.78); line-height: 1; }
+.wt-dow-dots { display: flex; gap: 2px; min-height: 6px; }
+.wt-dot { width: 6px; height: 6px; border-radius: 50%; }
+.wt-dow--weekend .wt-dow-label { color: rgb(var(--v-theme-error)); }
+.wt-dow--weekend .wt-dow-count { color: rgb(var(--v-theme-error)); }
+.wt-dow--empty .wt-dow-count { color: rgba(0,0,0,0.2); font-weight: 400; font-size: 12px; }
+
+/* ── Weekly template edit dialog ── */
+.wt-edit-row { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.wt-edit-dow { width: 20px; flex-shrink: 0; font-size: 13px; font-weight: 700; color: rgba(0,0,0,0.6); text-align: center; }
+.wt-edit-chips { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.wt-chip-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; flex-shrink: 0; }
 </style>
