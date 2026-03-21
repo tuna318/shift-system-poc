@@ -36,6 +36,7 @@ export interface ShiftEntry {
   adjustingResponse?: string       // employee's reply
   adjustingResponseStatus?: AdjustingResponseStatus  // employee's response state
   preAdjustStatus?: CellStatus     // status before ADJUSTING, for revert
+  adjustTargetStatus?: 'CONFIRMED' | 'DAY_OFF_CONFIRMED'  // what manager wants to reach
   managerRequested?: boolean       // true when manager initiated the request (not employee)
 }
 

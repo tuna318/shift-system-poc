@@ -130,6 +130,7 @@
                   class="shift-bar"
                   :style="barStyle(row.entry)"
                   :class="barClass(row.entry.cellStatus)"
+                  @click="openEditor(row.entry)"
                 >
                   <div class="shift-bar__inner">
                     <span class="shift-bar__time">{{ row.entry.startTime }}–{{ row.entry.endTime }}</span>
@@ -137,7 +138,13 @@
                 </div>
 
                 <!-- Day-off -->
-                <div v-else class="dayoff-badge" :style="{ left: `${8 * PX_PER_HOUR}px` }">
+                <div
+                  v-else
+                  class="dayoff-badge"
+                  :style="{ left: `${8 * PX_PER_HOUR}px` }"
+                  style="cursor: pointer"
+                  @click="openEditor(row.entry)"
+                >
                   <v-chip size="x-small" variant="tonal" prepend-icon="mdi-sleep">
                     {{ row.entry.cellStatus === 'DAY_OFF_CONFIRMED' ? '休み確定' : '休み希望' }}
                   </v-chip>
@@ -214,7 +221,8 @@
           <div
             v-for="row in dept.rows"
             :key="row.entry.id"
-            class="emp-info-row"
+            class="emp-info-row emp-info-row--clickable"
+            @click="openEditor(row.entry)"
           >
             <div class="emp-avatar" :class="avatarClass(row.employee.department)">
               {{ avatarInitial(row.employee.name) }}
@@ -223,16 +231,29 @@
               <div class="emp-name">{{ row.employee.name }}</div>
               <div class="emp-pos">{{ row.employee.position }}</div>
             </div>
+            <v-icon size="14" class="emp-chevron text-medium-emphasis">mdi-chevron-right</v-icon>
           </div>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- Shift entry editor dialog -->
+  <ShiftEntryEditor
+    v-model="editorOpen"
+    :employee-id="editorState.employeeId"
+    :shift-date="editorState.shiftDate"
+    :entry="editorState.entry"
+    :board-status="boardStatus"
+    @save="handleEditorSave"
+    @delete="handleEditorDelete"
+  />
 </template>
 
 <script setup lang="ts">
 import type { ShiftEntry } from '~/types'
 import { useMockData } from '~/composables/useMockData'
+import { useShiftStore } from '~/stores/shift.store'
 
 const props = defineProps<{
   boardId: string
@@ -242,6 +263,8 @@ const props = defineProps<{
 }>()
 
 const { getEmployee } = useMockData()
+const shiftStore = useShiftStore()
+const boardStatus = computed(() => shiftStore.currentBoard?.status ?? 'DRAFT')
 
 // ─── Layout constants ─────────────────────────────────────────
 const PX_PER_HOUR = 64          // pixels per hour across the 24h timeline
@@ -465,6 +488,31 @@ function avatarInitial(name: string) {
   return name.replace(/\s/g, '').charAt(0)
 }
 
+// ─── Entry editor ─────────────────────────────────────────────
+const editorOpen = ref(false)
+const editorState = reactive({
+  employeeId: '',
+  shiftDate: '',
+  entry: null as ShiftEntry | null,
+})
+
+function openEditor(entry: ShiftEntry) {
+  editorState.employeeId = entry.employeeId
+  editorState.shiftDate = entry.shiftDate
+  editorState.entry = entry
+  editorOpen.value = true
+}
+
+function handleEditorSave(changes: Partial<ShiftEntry>) {
+  if (editorState.entry) {
+    shiftStore.updateEntry(editorState.entry.id, changes)
+  }
+}
+
+function handleEditorDelete(entryId: string) {
+  shiftStore.deleteEntry(entryId)
+}
+
 // v-bind CSS vars
 const empColPx  = `${EMP_COL_PX}px`
 const statColPx = `${STAT_COL_PX}px`
@@ -587,9 +635,9 @@ const statColPx = `${STAT_COL_PX}px`
   position: absolute; top: 50%; transform: translateY(-50%);
   height: 28px; border-radius: 6px;
   display: flex; align-items: center; overflow: hidden;
-  transition: filter 0.1s; cursor: default;
+  transition: filter 0.1s, box-shadow 0.1s; cursor: pointer;
 }
-.shift-bar:hover { filter: brightness(0.93); }
+.shift-bar:hover { filter: brightness(0.93); box-shadow: 0 2px 6px rgba(0,0,0,0.18); }
 
 .shift-bar--confirmed  { background: #3587dc; color: #fff; }
 .shift-bar--requested  { background: rgba(53,135,220,0.12); border: 1.5px solid #3587dc; color: #1d4ed8; }
@@ -623,7 +671,7 @@ const statColPx = `${STAT_COL_PX}px`
   position: absolute;
   top: 0; left: 0;
   width: v-bind(empColPx);
-  pointer-events: none; /* rows are visual only */
+  pointer-events: none;
   background: white;
   z-index: 10;
 }
@@ -640,10 +688,24 @@ const statColPx = `${STAT_COL_PX}px`
   height: 46px;
   display: flex; align-items: center;
   gap: 8px;
-  padding-right: 12px;
+  padding-right: 6px;
   border-bottom: 1px solid rgba(0,0,0,0.04);
 }
 .emp-info-row:last-child { border-bottom: none; }
+
+.emp-info-row--clickable {
+  pointer-events: auto;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.emp-info-row--clickable:hover { background: rgba(0,0,0,0.035); }
+
+.emp-chevron {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.emp-info-row--clickable:hover .emp-chevron { opacity: 1; }
 
 .emp-avatar {
   width: 28px; height: 28px; border-radius: 50%;

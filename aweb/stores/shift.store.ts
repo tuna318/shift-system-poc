@@ -91,12 +91,13 @@ export const useShiftStore = defineStore('shift', {
       }
     },
 
-    requestAdjustment(entryId: string, reason: string) {
+    requestAdjustment(entryId: string, reason: string, targetStatus?: 'CONFIRMED' | 'DAY_OFF_CONFIRMED') {
       const entry = this.entries.find(e => e.id === entryId)
       if (entry) {
         entry.preAdjustStatus = entry.cellStatus
         entry.cellStatus = 'ADJUSTING'
         entry.adjustingReason = reason
+        entry.adjustTargetStatus = targetStatus
         this.showSnackbar('調整依頼を送信しました')
       }
     },
