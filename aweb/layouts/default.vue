@@ -7,6 +7,7 @@
         <slot />
       </div>
     </v-main>
+    <ChatOverlay />
   </v-app>
 </template>
 

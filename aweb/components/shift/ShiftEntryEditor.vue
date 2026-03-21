@@ -28,32 +28,44 @@
                 <div class="text-subtitle-2 font-weight-bold">{{ employeeName }}</div>
                 <div class="text-caption text-medium-emphasis">{{ employeeSubtitle }}</div>
               </div>
-              <div class="text-caption text-medium-emphasis text-right" style="flex-shrink:0">{{ formattedDate }}</div>
+              <!-- Chat icon button with unread badge -->
+              <div class="chat-icon-wrap" @click="openChat">
+                <v-icon size="19" :color="employeeUnreadCount > 0 ? 'primary' : 'medium-emphasis'">
+                  mdi-message-text-outline
+                </v-icon>
+                <span v-if="employeeUnreadCount > 0" class="chat-icon-badge">{{ employeeUnreadCount }}</span>
+              </div>
             </div>
 
-            <!-- Shift times + hours -->
+            <!-- Date + time on the same row -->
             <template v-if="!isDayOffEntry">
-              <div class="d-flex align-center ga-2 mb-2">
-                <v-icon size="15" color="primary">mdi-clock-outline</v-icon>
-                <span class="text-body-2 font-weight-medium">{{ props.entry.startTime }}  →  {{ props.entry.endTime }}</span>
-                <span class="text-caption text-medium-emphasis ml-1">({{ workHours }}時間 / ¥{{ estimatedWage.toLocaleString() }})</span>
+              <div class="d-flex align-center ga-1 mb-2 flex-wrap" style="gap:6px!important">
+                <v-icon size="13" color="medium-emphasis">mdi-calendar-outline</v-icon>
+                <span class="text-caption text-medium-emphasis">{{ shortDate }}</span>
+                <span class="info-dot">·</span>
+                <v-icon size="13" color="primary">mdi-clock-outline</v-icon>
+                <span class="text-body-2 font-weight-medium">{{ props.entry.startTime }} → {{ props.entry.endTime }}</span>
+                <span class="text-caption text-medium-emphasis">({{ workHours }}時間 / ¥{{ estimatedWage.toLocaleString() }})</span>
               </div>
               <div class="d-flex align-center ga-2">
-                <v-icon size="15" color="medium-emphasis">mdi-chart-bar</v-icon>
+                <v-icon size="13" color="medium-emphasis">mdi-chart-bar</v-icon>
                 <span class="text-caption text-medium-emphasis">
                   今月累計: {{ Math.round(currentMonthlyHours * 10) / 10 }}h → {{ projectedHours }}h / 上限 {{ employeeMaxHours }}h
                 </span>
                 <span class="text-caption text-medium-emphasis ml-auto">残り {{ Math.max(0, employeeMaxHours - projectedHours) }}h</span>
               </div>
               <div v-if="wouldExceedLimit" class="d-flex align-center ga-2 mt-2 pa-2 rounded-lg" style="background:#FFFBEB">
-                <v-icon color="warning" size="15">mdi-alert-outline</v-icon>
+                <v-icon color="warning" size="13">mdi-alert-outline</v-icon>
                 <span class="text-caption" style="color:#92400e">このシフトは月間上限（{{ employeeMaxHours }}h）を超えています</span>
               </div>
             </template>
             <template v-else>
-              <div class="d-flex align-center ga-2">
-                <v-icon size="15" color="medium-emphasis">mdi-sleep</v-icon>
-                <span class="text-body-2 text-medium-emphasis">休日申請</span>
+              <div class="d-flex align-center" style="gap:6px">
+                <v-icon size="13" color="medium-emphasis">mdi-calendar-outline</v-icon>
+                <span class="text-caption text-medium-emphasis">{{ shortDate }}</span>
+                <span class="info-dot">·</span>
+                <v-icon size="13" color="medium-emphasis">mdi-sleep</v-icon>
+                <span class="text-caption text-medium-emphasis">休日申請</span>
               </div>
             </template>
           </div>
@@ -92,8 +104,8 @@
                     <button class="act-chip act-chip--confirmed" @click="doConfirm('CONFIRMED')">
                       <v-icon size="11">mdi-check-circle-outline</v-icon> シフト確定
                     </button>
-                    <button class="act-chip" :class="chatMode === 'adjust' ? 'act-chip--adjusting-on' : 'act-chip--adjusting'" @click="toggleChatAdjust">
-                      <v-icon size="11">mdi-message-alert-outline</v-icon> 調整を依頼
+                    <button class="act-chip act-chip--adjusting" :class="{ 'act-chip--adjusting-on': adjustCompose }" @click="adjustCompose = !adjustCompose; adjustReason = ''">
+                      <v-icon size="11">mdi-swap-horizontal-bold</v-icon> 調整依頼
                     </button>
                   </template>
 
@@ -102,8 +114,8 @@
                     <button class="act-chip act-chip--day-off" @click="doConfirm('DAY_OFF_CONFIRMED')">
                       <v-icon size="11">mdi-check-circle-outline</v-icon> 休み確定
                     </button>
-                    <button class="act-chip" :class="chatMode === 'adjust' ? 'act-chip--adjusting-on' : 'act-chip--adjusting'" @click="toggleChatAdjust">
-                      <v-icon size="11">mdi-message-alert-outline</v-icon> 調整を依頼
+                    <button class="act-chip act-chip--adjusting" :class="{ 'act-chip--adjusting-on': adjustCompose }" @click="adjustCompose = !adjustCompose; adjustReason = ''">
+                      <v-icon size="11">mdi-swap-horizontal-bold</v-icon> 調整依頼
                     </button>
                   </template>
 
@@ -119,9 +131,6 @@
 
                   <!-- DAY_OFF_CONFIRMED (DRAFT) -->
                   <template v-else-if="props.entry.cellStatus === 'DAY_OFF_CONFIRMED' && props.boardStatus === 'DRAFT'">
-                    <button class="act-chip" :class="chatMode === 'adjust' ? 'act-chip--adjusting-on' : 'act-chip--adjusting'" @click="toggleChatAdjust">
-                      <v-icon size="11">mdi-message-alert-outline</v-icon> 調整を依頼
-                    </button>
                     <button class="act-chip act-chip--revert" @click="toggleRevert">
                       <v-icon size="11">mdi-undo-variant</v-icon> 取り消す
                     </button>
@@ -146,6 +155,56 @@
               </div>
             </div>
 
+            <!-- Adjustment request info strip (visible when ADJUSTING) -->
+            <div v-if="props.entry.cellStatus === 'ADJUSTING'" class="adj-info-strip" :class="`adj-info-strip--${adjustResponseStatus.toLowerCase()}`">
+              <div class="adj-strip-left">
+                <v-icon size="13" class="adj-strip-icon">mdi-swap-horizontal-bold</v-icon>
+                <span class="adj-strip-label">調整依頼中</span>
+                <div class="adj-strip-direction">
+                  <span class="sc sc--xs" :class="activeAdjustSrcStyle">{{ activeAdjustSrcLabel }}</span>
+                  <v-icon size="11" color="medium-emphasis">mdi-arrow-right</v-icon>
+                  <span class="sc sc--xs" :class="activeAdjustTarget === 'CONFIRMED' ? 'sc--confirmed' : 'sc--dayoff-conf'">
+                    {{ activeAdjustTarget === 'CONFIRMED' ? 'シフト確定' : '休み確定' }}
+                  </span>
+                </div>
+              </div>
+              <div class="adj-resp-badge" :class="`adj-resp-badge--${adjustResponseStatus.toLowerCase()}`">
+                <v-icon size="11">{{ adjustResponseIcon }}</v-icon>
+                {{ adjustResponseLabel }}
+              </div>
+            </div>
+
+            <!-- Adjust compose (expands below the flow row when 調整依頼 is clicked) -->
+            <v-expand-transition>
+              <div v-if="adjustCompose" class="adjust-compose-panel">
+                <div class="d-flex align-center mb-2" style="gap:6px">
+                  <v-icon size="13" color="warning">mdi-swap-horizontal-bold</v-icon>
+                  <span class="text-caption font-weight-medium" style="color:#92400e">調整依頼の内容</span>
+                  <div class="d-flex align-center ml-auto" style="gap:5px">
+                    <span class="sc" :class="adjustSrcStyleClass">{{ currentStatusConfig.label }}</span>
+                    <v-icon size="12" color="medium-emphasis">mdi-arrow-right</v-icon>
+                    <span class="sc" :class="adjustTargetStatus === 'CONFIRMED' ? 'sc--confirmed' : 'sc--dayoff-conf'">
+                      {{ adjustTargetStatus === 'CONFIRMED' ? 'シフト確定' : '休み確定' }}
+                    </span>
+                  </div>
+                </div>
+                <v-textarea
+                  v-model="adjustReason"
+                  placeholder="依頼の理由（任意）..."
+                  rows="2" auto-grow
+                  density="compact" variant="outlined" rounded="lg"
+                  hide-details class="mb-2"
+                />
+                <div class="d-flex justify-end" style="gap:8px">
+                  <v-btn size="small" variant="text" @click="adjustCompose = false; adjustReason = ''">キャンセル</v-btn>
+                  <v-btn size="small" color="warning" variant="flat" rounded="lg"
+                    prepend-icon="mdi-send-outline" @click="sendAdjustRequest">
+                    依頼を送信
+                  </v-btn>
+                </div>
+              </div>
+            </v-expand-transition>
+
             <!-- Revert confirm (expands below the flow row) -->
             <v-expand-transition>
               <div v-if="actionMode === 'revert'" class="revert-panel">
@@ -161,101 +220,6 @@
               </div>
             </v-expand-transition>
           </div>
-
-          <!-- ③ Message thread (existing messages — always visible when present) -->
-          <template v-if="hasMessages">
-            <v-divider />
-            <div class="chat-thread">
-              <!-- ADJUSTING: who wants what -->
-              <div v-if="props.entry.cellStatus === 'ADJUSTING'" class="nego-bar">
-                <div class="nego-side">
-                  <div class="nego-side-label">スタッフの希望</div>
-                  <div class="editor-status-chip" :class="`editor-chip--${statusConfigs[props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'].styleKey}`">
-                    <v-icon :size="11">{{ statusConfigs[props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'].icon }}</v-icon>
-                    <span>{{ statusConfigs[props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'].label }}</span>
-                  </div>
-                </div>
-                <v-icon size="16" color="warning" class="mx-1">mdi-arrow-right-bold</v-icon>
-                <div class="nego-side">
-                  <div class="nego-side-label">マネージャーの要望</div>
-                  <div class="editor-status-chip" :class="`editor-chip--${managerRequestedStatusConfig.styleKey}`">
-                    <v-icon :size="11">{{ managerRequestedStatusConfig.icon }}</v-icon>
-                    <span>{{ managerRequestedStatusConfig.label }}</span>
-                  </div>
-                </div>
-                <v-spacer />
-                <div class="response-badge" :class="`response-badge--${props.entry.adjustingResponseStatus ?? 'PENDING'}`">
-                  <v-icon size="12">{{ responseIcon(props.entry.adjustingResponseStatus) }}</v-icon>
-                  {{ responseLabel(props.entry.adjustingResponseStatus) }}
-                </div>
-              </div>
-              <!-- Manager message -->
-              <div v-if="props.entry.adjustingReason" class="bubble bubble--manager">
-                <div class="bubble-sender"><v-icon size="12">mdi-briefcase-outline</v-icon> マネージャー</div>
-                <div class="bubble-body">{{ props.entry.adjustingReason }}</div>
-              </div>
-              <!-- Employee reply -->
-              <div v-if="props.entry.adjustingResponse" class="bubble bubble--employee">
-                <div class="bubble-sender"><v-icon size="12">mdi-account-outline</v-icon> {{ employeeName }}</div>
-                <div class="bubble-body">{{ props.entry.adjustingResponse }}</div>
-              </div>
-              <div v-else-if="props.entry.cellStatus === 'ADJUSTING'" class="chat-waiting">
-                <v-icon size="13" color="medium-emphasis">mdi-clock-outline</v-icon>
-                <span class="text-caption text-medium-emphasis">スタッフの返答待ち...</span>
-              </div>
-              <!-- General note -->
-              <div v-if="props.entry.note" class="bubble bubble--note">
-                <div class="bubble-sender"><v-icon size="12">mdi-note-text-outline</v-icon> メモ</div>
-                <div class="bubble-body">{{ props.entry.note }}</div>
-              </div>
-            </div>
-          </template>
-
-          <!-- ④ Adjust compose (only when 調整を依頼 is active) -->
-          <v-expand-transition>
-            <div v-if="chatMode === 'adjust'" class="adjust-compose">
-              <!-- Header -->
-              <div class="adjust-compose-header">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="13" color="warning">mdi-cellphone-message</v-icon>
-                  <span class="adjust-compose-title">調整依頼メッセージ</span>
-                </div>
-                <v-btn size="x-small" variant="text" color="medium-emphasis" @click="chatMode = 'note'">キャンセル</v-btn>
-              </div>
-              <!-- Target status (auto-determined, informational) -->
-              <div class="adjust-target-row">
-                <span class="adjust-target-label">変更先ステータス</span>
-                <div
-                  class="editor-status-chip"
-                  :class="adjustTarget === 'CONFIRMED' ? 'editor-chip--confirmed' : 'editor-chip--day-off-confirmed'"
-                >
-                  <v-icon :size="11">{{ adjustTarget === 'CONFIRMED' ? 'mdi-check-circle-outline' : 'mdi-moon-waning-crescent' }}</v-icon>
-                  {{ adjustTarget === 'CONFIRMED' ? 'シフト確定' : '休み確定' }}
-                </div>
-              </div>
-              <!-- Input -->
-              <div class="d-flex ga-2 align-end px-3 pb-3">
-                <v-textarea
-                  v-model="chatInput"
-                  placeholder="スタッフへのメッセージを入力..."
-                  auto-grow rows="2" max-rows="4"
-                  density="compact" variant="outlined" rounded="lg"
-                  hide-details
-                  @keydown.ctrl.enter.prevent="sendChatMessage"
-                  @keydown.meta.enter.prevent="sendChatMessage"
-                />
-                <v-btn
-                  color="warning" variant="flat" icon size="small"
-                  :disabled="!chatInput.trim()"
-                  style="margin-bottom:3px;flex-shrink:0"
-                  @click="sendChatMessage"
-                >
-                  <v-icon size="17">mdi-send</v-icon>
-                </v-btn>
-              </div>
-              <div class="px-3 pb-2" style="font-size:10px;color:rgba(0,0,0,0.35)">Ctrl+Enter で送信</div>
-            </div>
-          </v-expand-transition>
 
         </template>
 
@@ -383,7 +347,9 @@
 <script setup lang="ts">
 import { useMockData } from '~/composables/useMockData'
 import { useShiftStore, MAX_MONTHLY_HOURS } from '~/stores/shift.store'
-import type { ShiftEntry, CellStatus, AdjustingResponseStatus } from '~/types'
+import { useChatStore } from '~/stores/chat.store'
+import { useChatMessages } from '~/composables/useChatMessages'
+import type { ShiftEntry, CellStatus } from '~/types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -401,6 +367,8 @@ const emit = defineEmits<{
 
 const { getEmployee } = useMockData()
 const shiftStore = useShiftStore()
+const chatStore  = useChatStore()
+const { getMessages, addMessage } = useChatMessages()
 
 const dialog = computed({
   get: () => props.modelValue,
@@ -439,6 +407,13 @@ const formattedDate = computed(() => {
   })
 })
 
+const shortDate = computed(() => {
+  if (!props.shiftDate) return ''
+  return new Date(props.shiftDate).toLocaleDateString('ja-JP', {
+    month: 'numeric', day: 'numeric', weekday: 'short',
+  })
+})
+
 const isDayOffEntry = computed(() =>
   props.entry?.cellStatus === 'DAY_OFF_REQUESTED' || props.entry?.cellStatus === 'DAY_OFF_CONFIRMED',
 )
@@ -459,67 +434,15 @@ const currentStatusConfig = computed<StatusConfig>(() =>
 )
 
 
-const managerRequestedStatusConfig = computed<StatusConfig>(() => {
-  if (props.entry?.adjustTargetStatus) return statusConfigs[props.entry.adjustTargetStatus]
-  // fallback: infer opposite of what employee wanted
-  const pre = props.entry?.preAdjustStatus
-  if (pre === 'DAY_OFF_REQUESTED' || pre === 'DAY_OFF_CONFIRMED') return statusConfigs.CONFIRMED
-  return statusConfigs.DAY_OFF_CONFIRMED
-})
-
 // ── Action mode (only used for revert) ────────────────────────
 const actionMode = ref<null | 'revert'>(null)
-const adjustTarget = ref<'CONFIRMED' | 'DAY_OFF_CONFIRMED'>('CONFIRMED')
 
 watch(() => props.entry, () => {
   actionMode.value = null
-  chatMode.value = 'note'
-  chatInput.value = ''
-  adjustTarget.value = 'CONFIRMED'
 })
 
 function toggleRevert() {
   actionMode.value = actionMode.value === 'revert' ? null : 'revert'
-  chatMode.value = 'note'
-}
-
-// ── Chat state ─────────────────────────────────────────────────
-const chatMode  = ref<'note' | 'adjust'>('note')
-const chatInput = ref('')
-
-const hasMessages = computed(() =>
-  !!props.entry?.adjustingReason ||
-  !!props.entry?.adjustingResponse ||
-  !!props.entry?.note,
-)
-
-function toggleChatAdjust() {
-  chatMode.value = chatMode.value === 'adjust' ? 'note' : 'adjust'
-  if (chatMode.value === 'adjust') {
-    actionMode.value = null
-    // opposite of employee's preference: shift-requested → day-off, day-off → shift
-    adjustTarget.value = props.entry?.cellStatus === 'SHIFT_REQUESTED' ? 'DAY_OFF_CONFIRMED' : 'CONFIRMED'
-  }
-}
-
-function sendChatMessage() {
-  if (!chatInput.value.trim() || !props.entry) return
-  shiftStore.requestAdjustment(props.entry.id, chatInput.value.trim(), adjustTarget.value)
-  chatInput.value = ''
-  chatMode.value = 'note'
-  close()
-}
-
-// ── Workflow helpers ───────────────────────────────────────────
-function responseIcon(s?: AdjustingResponseStatus): string {
-  if (s === 'ACCEPTED') return 'mdi-check-circle'
-  if (s === 'REJECTED') return 'mdi-close-circle'
-  return 'mdi-clock-outline'
-}
-function responseLabel(s?: AdjustingResponseStatus): string {
-  if (s === 'ACCEPTED') return '承諾'
-  if (s === 'REJECTED') return '拒否'
-  return '返答待ち'
 }
 
 const revertTargetLabel = computed(() => {
@@ -603,6 +526,100 @@ const timeOptions = computed(() => {
 })
 
 const isValid = computed(() => !!form.startTime && !!form.endTime && (workHours.value as number) > 0)
+
+// ── Chat / adjust request ──────────────────────────────────────
+const adjustCompose = ref(false)
+const adjustReason  = ref('')
+
+const employeeUnreadCount = computed(() =>
+  getMessages(props.employeeId).filter(m => m.sender === 'employee').length,
+)
+
+const canSendAdjustRequest = computed(() =>
+  props.entry?.cellStatus === 'SHIFT_REQUESTED' || props.entry?.cellStatus === 'DAY_OFF_REQUESTED',
+)
+
+const adjustTargetStatus = computed<'CONFIRMED' | 'DAY_OFF_CONFIRMED'>(() =>
+  props.entry?.cellStatus === 'SHIFT_REQUESTED' ? 'DAY_OFF_CONFIRMED' : 'CONFIRMED',
+)
+
+const adjustSrcStyleClass = computed(() =>
+  props.entry?.cellStatus === 'SHIFT_REQUESTED' ? 'sc--shift-req' : 'sc--dayoff-req',
+)
+
+// Source and target of the active adjustment request (for the info strip)
+const activeAdjustTarget = computed<'CONFIRMED' | 'DAY_OFF_CONFIRMED'>(() =>
+  props.entry?.adjustTargetStatus
+    ?? (props.entry?.preAdjustStatus === 'SHIFT_REQUESTED' ? 'DAY_OFF_CONFIRMED' : 'CONFIRMED'),
+)
+
+const activeAdjustSrcLabel = computed(() => {
+  const src = props.entry?.preAdjustStatus ?? 'SHIFT_REQUESTED'
+  return { SHIFT_REQUESTED: 'シフト希望', DAY_OFF_REQUESTED: '休み希望', CONFIRMED: 'シフト確定', DAY_OFF_CONFIRMED: '休み確定', ADJUSTING: '調整中' }[src] ?? src
+})
+
+const activeAdjustSrcStyle = computed(() => {
+  const src = props.entry?.preAdjustStatus ?? 'SHIFT_REQUESTED'
+  return { SHIFT_REQUESTED: 'sc--shift-req', DAY_OFF_REQUESTED: 'sc--dayoff-req', CONFIRMED: 'sc--confirmed', DAY_OFF_CONFIRMED: 'sc--dayoff-conf', ADJUSTING: 'sc--adjusting' }[src] ?? 'sc--shift-req'
+})
+
+// Resolve the employee's response to the active adjustment request
+const adjustResponseStatus = computed((): 'PENDING' | 'ACCEPTED' | 'DECLINED' => {
+  if (props.entry?.cellStatus !== 'ADJUSTING') return 'PENDING'
+  // Check chat messages first (most accurate)
+  const chatResp = getMessages(props.employeeId)
+    .filter(m => m.adjustRequest?.entryId === props.entry?.id)
+    .at(-1)?.adjustRequest?.responseStatus
+  if (chatResp) return chatResp === 'DECLINED' ? 'DECLINED' : chatResp as 'PENDING' | 'ACCEPTED'
+  // Fall back to store field (REJECTED maps to DECLINED)
+  const stored = props.entry?.adjustingResponseStatus
+  if (stored === 'REJECTED') return 'DECLINED'
+  if (stored === 'ACCEPTED') return 'ACCEPTED'
+  return 'PENDING'
+})
+
+const adjustResponseLabel = computed(() => {
+  const map = { PENDING: '返答待ち', ACCEPTED: '承諾済み', DECLINED: '拒否' }
+  return map[adjustResponseStatus.value]
+})
+
+const adjustResponseIcon = computed(() => {
+  const map = { PENDING: 'mdi-clock-outline', ACCEPTED: 'mdi-check-circle-outline', DECLINED: 'mdi-close-circle-outline' }
+  return map[adjustResponseStatus.value]
+})
+
+watch(() => props.entry, () => {
+  adjustCompose.value = false
+  adjustReason.value = ''
+})
+
+function openChat() {
+  chatStore.openConversation(props.employeeId)
+}
+
+function sendAdjustRequest() {
+  if (!props.entry) return
+  const targetStatus = adjustTargetStatus.value
+  addMessage({
+    employeeId: props.employeeId,
+    sender: 'manager',
+    body: adjustReason.value.trim() || '調整をお願いできますか？',
+    shiftDate: props.shiftDate,
+    adjustRequest: {
+      entryId: props.entry.id,
+      shiftDate: props.shiftDate,
+      startTime: props.entry.startTime ?? '00:00',
+      endTime:   props.entry.endTime   ?? '00:00',
+      currentStatus: props.entry.cellStatus,
+      targetStatus,
+      responseStatus: 'PENDING',
+    },
+  })
+  shiftStore.requestAdjustment(props.entry.id, adjustReason.value.trim(), targetStatus)
+  adjustCompose.value = false
+  adjustReason.value  = ''
+  chatStore.openConversation(props.employeeId)
+}
 
 // ── Add mode save ──────────────────────────────────────────────
 function handleSave() {
@@ -804,74 +821,116 @@ function close() {
   background: rgba(239,68,68,0.05);
 }
 
-/* ── Message thread ──────────────────────────────────── */
-.chat-thread {
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* ── Chat icon button in header ───────────────────── */
+.chat-icon-wrap {
+  position: relative;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.13s;
+}
+.chat-icon-wrap:hover { background: rgba(53,135,220,0.10); }
+
+.chat-icon-badge {
+  position: absolute;
+  top: -1px; right: -1px;
+  min-width: 15px; height: 15px;
+  border-radius: 8px;
+  background: rgb(var(--v-theme-primary)); color: #fff;
+  font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 3px;
+  border: 1.5px solid #fff;
+  pointer-events: none;
 }
 
-/* Negotiation bar */
-.nego-bar {
-  display: flex; align-items: center; flex-wrap: wrap;
-  gap: 8px; padding: 8px 10px;
-  background: rgba(245,158,11,0.07);
-  border-left: 3px solid #f59e0b;
-  border-radius: 0 6px 6px 0;
-  margin-bottom: 2px;
-}
-.nego-side { display: flex; flex-direction: column; gap: 4px; }
-.nego-side-label { font-size: 10px; color: rgba(0,0,0,0.5); font-weight: 500; }
-
-/* Response badge */
-.response-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 8px; border-radius: 12px;
-  font-size: 11px; font-weight: 600; flex-shrink: 0;
-}
-.response-badge--PENDING  { background: rgba(0,0,0,0.07);     color: rgba(0,0,0,0.5); }
-.response-badge--ACCEPTED { background: rgba(22,163,74,0.12);  color: #15803d; }
-.response-badge--REJECTED { background: rgba(220,38,38,0.10);  color: #b91c1c; }
-
-/* Bubbles */
-.bubble {
-  max-width: 88%; padding: 7px 10px;
-  border-radius: 10px; font-size: 12px; line-height: 1.5;
-}
-.bubble--manager  { background: rgba(53,135,220,0.08); border: 1px solid rgba(53,135,220,0.15); align-self: flex-start; }
-.bubble--employee { background: white; border: 1px solid rgba(0,0,0,0.12); align-self: flex-end; }
-.bubble--note     { background: rgba(0,0,0,0.03); border: 1px dashed rgba(0,0,0,0.14); align-self: flex-start; font-style: italic; }
-.bubble-sender    { font-size: 10px; color: rgba(0,0,0,0.4); margin-bottom: 3px; display: flex; align-items: center; gap: 3px; }
-.bubble-body      { color: rgba(0,0,0,0.8); }
-
-.chat-waiting { display: flex; align-items: center; gap: 5px; padding: 2px; }
-
-/* ── Adjust compose box ──────────────────────────────── */
-.adjust-compose {
-  border-top: 1px solid rgba(245,158,11,0.25);
-  background: rgba(245,158,11,0.04);
-}
-.adjust-compose-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px 8px;
-}
-.adjust-compose-title {
-  font-size: 12px; font-weight: 600; color: #92400e;
-}
-
-/* Target status selector */
-.adjust-target-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px 10px;
-  flex-wrap: wrap;
-}
-.adjust-target-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(0,0,0,0.45);
+/* ── Date · time row separator dot ───────────────── */
+.info-dot {
+  font-size: 10px;
+  color: rgba(0,0,0,0.25);
   flex-shrink: 0;
 }
+
+/* ── Adjustment request info strip ───────────────── */
+.adj-info-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.adj-info-strip--pending  { background: rgba(245,158,11,0.07); border-color: rgba(245,158,11,0.22); }
+.adj-info-strip--accepted { background: rgba(22,163,74,0.07);  border-color: rgba(22,163,74,0.22);  }
+.adj-info-strip--declined { background: rgba(220,38,38,0.06);  border-color: rgba(220,38,38,0.18);  }
+
+.adj-strip-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.adj-strip-icon { flex-shrink: 0; }
+.adj-info-strip--pending  .adj-strip-icon { color: #d97706; }
+.adj-info-strip--accepted .adj-strip-icon { color: #16a34a; }
+.adj-info-strip--declined .adj-strip-icon { color: #dc2626; }
+
+.adj-strip-label {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.adj-info-strip--pending  .adj-strip-label { color: #92400e; }
+.adj-info-strip--accepted .adj-strip-label { color: #15803d; }
+.adj-info-strip--declined .adj-strip-label { color: #b91c1c; }
+
+.adj-strip-direction {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.adj-resp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.adj-resp-badge--pending  { background: rgba(245,158,11,0.15); color: #92400e; }
+.adj-resp-badge--accepted { background: rgba(22,163,74,0.15);  color: #15803d; }
+.adj-resp-badge--declined { background: rgba(220,38,38,0.12);  color: #b91c1c; }
+
+/* Extra-small status chip variant for the strip */
+.sc--xs { padding: 1px 6px; font-size: 10px; }
+
+/* ── Adjust compose panel (inline expand, same pattern as revert-panel) ── */
+.adjust-compose-panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border-left: 3px solid #f59e0b;
+  background: rgba(245,158,11,0.05);
+}
+
+/* Status chips used in adjust compose */
+.sc {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; border: 1.5px solid transparent;
+}
+.sc--shift-req   { background: transparent; border-color: #3587dc; color: #1d4ed8; }
+.sc--dayoff-req  { background: transparent; border-color: #64748b; color: #475569; }
+.sc--confirmed   { background: #3587dc;     border-color: #3587dc; color: #fff; }
+.sc--dayoff-conf { background: #64748b;     border-color: #64748b; color: #fff; }
+
 </style>

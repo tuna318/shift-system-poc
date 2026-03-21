@@ -153,72 +153,6 @@
                     </div>
                   </div>
 
-                  <!-- ──── ADJUSTING: negotiation card ──── -->
-                  <v-expand-transition>
-                    <div v-if="emp.entry.cellStatus === 'ADJUSTING'" class="negotiation-card">
-                      <!-- Before / After -->
-                      <div class="d-flex align-items-center ga-2 mb-3">
-                        <div class="nego-side">
-                          <div class="nego-side-label">スタッフの希望</div>
-                          <StatusChip :status="emp.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'" />
-                        </div>
-                        <v-icon size="20" color="warning" class="mx-1">mdi-arrow-right-bold</v-icon>
-                        <div class="nego-side">
-                          <div class="nego-side-label">マネージャーの要望</div>
-                          <StatusChip :status="(emp.entry.preAdjustStatus === 'DAY_OFF_REQUESTED' || emp.entry.preAdjustStatus === 'DAY_OFF_CONFIRMED') ? 'CONFIRMED' : 'DAY_OFF_CONFIRMED'" />
-                        </div>
-                        <v-spacer />
-                        <!-- Response badge -->
-                        <div class="response-badge" :class="`response-badge--${emp.entry.adjustingResponseStatus ?? 'PENDING'}`">
-                          <v-icon size="13">{{ responseIcon(emp.entry.adjustingResponseStatus) }}</v-icon>
-                          {{ responseLabel(emp.entry.adjustingResponseStatus) }}
-                        </div>
-                      </div>
-
-                      <!-- Message thread -->
-                      <div class="message-thread">
-                        <!-- Manager message -->
-                        <div class="message-bubble message-bubble--manager">
-                          <div class="message-sender">
-                            <v-icon size="13">mdi-briefcase-outline</v-icon> マネージャー
-                          </div>
-                          <div class="message-body">{{ emp.entry.adjustingReason ?? '調整を依頼しています。' }}</div>
-                        </div>
-
-                        <!-- Employee reply -->
-                        <div v-if="emp.entry.adjustingResponse" class="message-bubble message-bubble--employee">
-                          <div class="message-sender">
-                            <v-icon size="13">mdi-account-outline</v-icon> {{ emp.name }}
-                          </div>
-                          <div class="message-body">{{ emp.entry.adjustingResponse }}</div>
-                        </div>
-                        <div v-else class="message-waiting">
-                          <v-icon size="13" color="medium-emphasis">mdi-clock-outline</v-icon>
-                          <span class="text-caption text-medium-emphasis">スタッフの返答待ち...</span>
-                        </div>
-                      </div>
-                    </div>
-                  </v-expand-transition>
-
-                  <!-- ──── Inline: Adjustment form ──── -->
-                  <v-expand-transition>
-                    <div v-if="adjustState.entryId === emp.entry.id && adjustState.mode === 'adjust'" class="inline-panel inline-panel--warn">
-                      <div class="d-flex align-center ga-2 mb-2">
-                        <v-icon size="15" color="warning">mdi-cellphone-message</v-icon>
-                        <span class="text-caption font-weight-medium" style="color:#92400e">スタッフのデバイスに通知が送信されます</span>
-                      </div>
-                      <div class="text-caption text-medium-emphasis mb-2">
-                        <template v-if="emp.entry.cellStatus === 'DAY_OFF_REQUESTED' || emp.entry.cellStatus === 'DAY_OFF_CONFIRMED'">休みの予定を変更し、出勤をお願いする理由を入力してください。</template>
-                        <template v-else>シフト希望を承認できない理由と、調整内容を入力してください。</template>
-                      </div>
-                      <v-textarea v-model="adjustState.reason" label="従業員へのメッセージ（必須）" auto-grow rows="2" max-rows="4" density="compact" variant="outlined" rounded="lg" hide-details="auto" class="mb-3" placeholder="例：〇日は人員が不足しているため、ご出勤をお願いできますか？" />
-                      <div class="d-flex justify-end ga-2">
-                        <v-btn size="small" variant="text" @click="clearState">キャンセル</v-btn>
-                        <v-btn size="small" color="warning" variant="flat" rounded="lg" prepend-icon="mdi-send-outline" :disabled="!adjustState.reason.trim()" @click="submitAdjustment(emp.entry)">送信して調整中にする</v-btn>
-                      </div>
-                    </div>
-                  </v-expand-transition>
-
                   <!-- ──── Inline: Revert confirm ──── -->
                   <v-expand-transition>
                     <div v-if="adjustState.entryId === emp.entry.id && adjustState.mode === 'revert'" class="inline-panel inline-panel--error">
@@ -335,9 +269,10 @@
 </template>
 
 <script setup lang="ts">
-import type { AllocationSetup, ShiftSlot, ShiftEntry, CellStatus, AdjustingResponseStatus, Employee } from '~/types'
+import type { AllocationSetup, ShiftSlot, ShiftEntry, CellStatus, Employee } from '~/types'
 import { useMockData } from '~/composables/useMockData'
 import { useShiftStore } from '~/stores/shift.store'
+import { useChatStore } from '~/stores/chat.store'
 
 const props = defineProps<{
   periodStart: string
@@ -348,6 +283,7 @@ const props = defineProps<{
 
 const { getEmployee, employees: allEmployees } = useMockData()
 const shiftStore = useShiftStore()
+const chatStore  = useChatStore()
 const boardStatus = computed(() => shiftStore.currentBoard?.status ?? 'DRAFT')
 
 const START_HOUR = 6
@@ -383,16 +319,6 @@ function statusIconColor(s: CellStatus): string {
   return map[s] ?? 'rgba(255,255,255,0.5)'
 }
 
-function responseIcon(s?: AdjustingResponseStatus): string {
-  if (s === 'ACCEPTED') return 'mdi-check-circle'
-  if (s === 'REJECTED') return 'mdi-close-circle'
-  return 'mdi-clock-outline'
-}
-function responseLabel(s?: AdjustingResponseStatus): string {
-  if (s === 'ACCEPTED') return '承諾'
-  if (s === 'REJECTED') return '拒否'
-  return '返答待ち'
-}
 
 // ─── Slot helpers ──────────────────────────────────────────────
 const slotMap = computed(() => {
@@ -512,9 +438,7 @@ function quickConfirm(entry: ShiftEntry, status: CellStatus) {
 }
 
 function toggleAdjust(entry: ShiftEntry) {
-  if (adjustState.entryId === entry.id && adjustState.mode === 'adjust') { clearState(); return }
-  requestPanel.value = null
-  adjustState.entryId = entry.id; adjustState.mode = 'adjust'; adjustState.reason = ''
+  chatStore.openConversation(entry.employeeId)
 }
 
 function toggleRevert(entry: ShiftEntry) {
@@ -523,9 +447,6 @@ function toggleRevert(entry: ShiftEntry) {
   adjustState.entryId = entry.id; adjustState.mode = 'revert'; adjustState.reason = ''
 }
 
-function submitAdjustment(entry: ShiftEntry) {
-  shiftStore.requestAdjustment(entry.id, adjustState.reason.trim()); clearState()
-}
 function confirmRevert(entry: ShiftEntry) {
   shiftStore.revertToRequested(entry.id); clearState()
 }
@@ -728,45 +649,8 @@ export const StatusChip = defineComponent({
 .emp-row-info { display:flex; align-items:center; flex:1; min-width:0; }
 .emp-row-actions { display:flex; align-items:center; flex-shrink:0; gap:2px; }
 
-/* ── Negotiation card (always visible when ADJUSTING) ── */
-.negotiation-card {
-  margin: 0 0 8px 0;
-  padding: 12px 14px;
-  background: rgba(245, 158, 11, 0.06);
-  border-left: 3px solid #f59e0b;
-  border-radius: 0 8px 8px 0;
-}
-.nego-side { display:flex; flex-direction:column; gap:4px; }
-.nego-side-label { font-size:10px; color:rgba(0,0,0,.5); font-weight:500; }
-
-.response-badge {
-  display:inline-flex; align-items:center; gap:4px;
-  padding:3px 8px; border-radius:12px; font-size:11px; font-weight:600; flex-shrink:0;
-}
-.response-badge--PENDING  { background:rgba(0,0,0,.07);  color:rgba(0,0,0,.5); }
-.response-badge--ACCEPTED { background:rgba(22,163,74,.12); color:#15803d; }
-.response-badge--REJECTED { background:rgba(220,38,38,.1); color:#b91c1c; }
-
-/* ── Message thread ──────────────────────────────────── */
-.message-thread { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
-.message-bubble { padding:8px 10px; border-radius:8px; }
-.message-bubble--manager {
-  background: rgba(var(--v-theme-primary), 0.08);
-  border: 1px solid rgba(var(--v-theme-primary), 0.15);
-  align-self: flex-start; max-width: 95%;
-}
-.message-bubble--employee {
-  background: white;
-  border: 1px solid rgba(0,0,0,.12);
-  align-self: flex-end; max-width: 95%;
-}
-.message-sender { font-size:10px; color:rgba(0,0,0,.45); margin-bottom:3px; display:flex; align-items:center; gap:3px; }
-.message-body   { font-size:12px; line-height:1.5; color:rgba(0,0,0,.8); }
-.message-waiting { display:flex; align-items:center; gap:5px; padding:6px 2px; }
-
 /* ── Inline panels ───────────────────────────────────── */
 .inline-panel { padding:12px 14px; border-radius:8px; margin:2px 0 8px; }
-.inline-panel--warn  { border-left:3px solid #f59e0b; background:rgba(245,158,11,.06); }
 .inline-panel--error { border-left:3px solid #ef4444; background:rgba(239,68,68,.05); }
 .inline-panel--request { border-left:3px solid rgb(var(--v-theme-primary)); background:rgba(var(--v-theme-primary),.04); }
 
