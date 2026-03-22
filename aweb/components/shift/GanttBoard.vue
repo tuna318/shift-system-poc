@@ -91,6 +91,11 @@
               @click="openEditor(entry)"
             />
 
+            <!-- Pending substitution badge -->
+            <div v-if="hasPendingSubstitution(emp.id, day.date)" class="gantt-sub-badge">
+              <v-icon size="9" color="warning">mdi-account-replace</v-icon>
+            </div>
+
             <!-- Add icon on hover -->
             <div class="cell-add-hint" :class="{ 'cell-add-hint--corner': getEntries(emp.id, day.date).length > 0 }">
               <v-icon size="14" color="medium-emphasis">mdi-plus</v-icon>
@@ -146,6 +151,7 @@
 
 <script setup lang="ts">
 import { useShiftStore } from '~/stores/shift.store'
+import { useSubstitutionStore } from '~/stores/substitution.store'
 import type { ShiftEntry, CellStatus } from '~/types'
 import { useMockData } from '~/composables/useMockData'
 
@@ -156,6 +162,7 @@ const props = defineProps<{
 }>()
 
 const shiftStore = useShiftStore()
+const subStore   = useSubstitutionStore()
 const { employees: allEmployees, getCollectionForBoard } = useMockData()
 
 const boardStatus = computed(() => shiftStore.currentBoard?.status ?? 'DRAFT')
@@ -235,6 +242,11 @@ function deptColor(dept: string): string {
     'レジ': '#f8c076',
   }
   return map[dept] ?? '#80848e'
+}
+
+// Substitution badge helpers
+function hasPendingSubstitution(empId: string, date: string): boolean {
+  return getEntries(empId, date).some(e => !!subStore.requestsForEntry(e.id))
 }
 
 // Editor state
@@ -401,6 +413,18 @@ const mainRef = ref<HTMLElement | null>(null)
   border-left: 2px solid #e0e1e4;
   display: flex;
   align-items: center;
+}
+
+/* Pending substitution badge (gantt cell corner) */
+.gantt-sub-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.15);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
 }
 
 /* Cell status classes */

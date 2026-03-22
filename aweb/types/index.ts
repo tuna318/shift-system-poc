@@ -153,6 +153,26 @@ export interface AllocationSetup {
   assignments: DaySlotAssignment[]
 }
 
+export type SubstitutionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED'
+export type SubstitutionType   = 'SUBSTITUTE' | 'SWAP'
+
+export interface SubstitutionRequest {
+  id: string
+  type: SubstitutionType
+  boardId: string
+  sourceEntryId: string
+  sourceEmployeeId: string
+  sourceDate: string
+  sourceStartTime: string
+  sourceEndTime: string
+  sourceDepartment: string
+  targetEmployeeId: string
+  targetEntryId?: string
+  status: SubstitutionStatus
+  reason?: string
+  createdAt: string
+}
+
 export type CrossShopRequestStatus = 'PENDING' | 'PARTIALLY_FILLED' | 'FULFILLED' | 'CANCELLED'
 export type CrossShopResponseStatus = 'NEW' | 'REVIEWING' | 'FORWARDED' | 'FULFILLED' | 'DECLINED'
 

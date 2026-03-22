@@ -152,6 +152,15 @@
                   </div>
                 </div>
 
+                <!-- Pending substitution badge on shift bar -->
+                <div
+                  v-if="hasPendingSub(row.entry)"
+                  class="sub-bar-badge"
+                  :style="{ left: `${toMinutes(row.entry.startTime) / 60 * PX_PER_HOUR + 4}px` }"
+                >
+                  <v-icon size="11" color="warning">mdi-account-replace</v-icon>
+                </div>
+
                 <!-- Adjusting warning dot -->
                 <div
                   v-if="row.entry.cellStatus === 'ADJUSTING'"
@@ -256,6 +265,7 @@
 import type { ShiftEntry } from '~/types'
 import { useMockData } from '~/composables/useMockData'
 import { useShiftStore } from '~/stores/shift.store'
+import { useSubstitutionStore } from '~/stores/substitution.store'
 
 const props = defineProps<{
   boardId: string
@@ -266,7 +276,12 @@ const props = defineProps<{
 
 const { getEmployee } = useMockData()
 const shiftStore = useShiftStore()
+const subStore   = useSubstitutionStore()
 const boardStatus = computed(() => shiftStore.currentBoard?.status ?? 'DRAFT')
+
+function hasPendingSub(entry: ShiftEntry): boolean {
+  return !!subStore.requestsForEntry(entry.id)
+}
 
 // ─── Layout constants ─────────────────────────────────────────
 const PX_PER_HOUR = 64          // pixels per hour across the 24h timeline
@@ -644,6 +659,9 @@ const statColPx = `${STAT_COL_PX}px`
 
 .shift-bar__inner { display: flex; align-items: center; gap: 4px; padding: 0 8px; overflow: hidden; white-space: nowrap; }
 .shift-bar__time  { font-size: 10px; font-weight: 600; }
+
+/* ─── Pending substitution badge on bar ────────────────────── */
+.sub-bar-badge { position: absolute; top: 2px; pointer-events: none; }
 
 /* ─── Adjusting dot ────────────────────────────────────────── */
 .adj-dot { position: absolute; top: 5px; }

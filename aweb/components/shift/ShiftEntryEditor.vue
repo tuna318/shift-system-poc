@@ -28,6 +28,10 @@
                 <div class="text-subtitle-2 font-weight-bold">{{ employeeName }}</div>
                 <div class="text-caption text-medium-emphasis">{{ employeeSubtitle }}</div>
               </div>
+              <!-- Pending substitution badge -->
+              <span v-if="hasPendingSubstitution" class="sub-pending-badge">
+                <v-icon size="10">mdi-account-replace</v-icon> 代打依頼中
+              </span>
               <!-- Chat icon button with unread badge -->
               <div class="chat-icon-wrap" @click="openChat">
                 <v-icon size="19" :color="employeeUnreadCount > 0 ? 'primary' : 'medium-emphasis'">
@@ -139,6 +143,9 @@
                     <button class="act-chip act-chip--revert" @click="toggleRevert">
                       <v-icon size="11">mdi-undo-variant</v-icon> 取り消す
                     </button>
+                    <button class="act-chip act-chip--substitute" :class="{ 'act-chip--substitute-on': substituteCompose }" @click="substituteCompose = !substituteCompose">
+                      <v-icon size="11">mdi-account-replace</v-icon> 代打を探す
+                    </button>
                   </template>
 
                   <!-- PUBLISHED -->
@@ -170,6 +177,16 @@
                 class="mt-3"
                 @sent="adjustCompose = false"
                 @cancel="adjustCompose = false"
+              />
+            </v-expand-transition>
+
+            <!-- Substitute finder (expands when 代打を探す is clicked) -->
+            <v-expand-transition>
+              <SubstituteFinder
+                v-if="substituteCompose && props.entry"
+                :source-entry="props.entry"
+                class="mt-3"
+                @done="substituteCompose = false"
               />
             </v-expand-transition>
 
@@ -315,6 +332,7 @@
 <script setup lang="ts">
 import { useMockData } from '~/composables/useMockData'
 import { useShiftStore, MAX_MONTHLY_HOURS } from '~/stores/shift.store'
+import { useSubstitutionStore } from '~/stores/substitution.store'
 import { useChatStore } from '~/stores/chat.store'
 import { useChatMessages } from '~/composables/useChatMessages'
 import type { ShiftEntry, CellStatus } from '~/types'
@@ -335,6 +353,7 @@ const emit = defineEmits<{
 
 const { getEmployee } = useMockData()
 const shiftStore = useShiftStore()
+const subStore   = useSubstitutionStore()
 const chatStore  = useChatStore()
 const { getMessages } = useChatMessages()
 
@@ -495,6 +514,13 @@ const timeOptions = computed(() => {
 
 const isValid = computed(() => !!form.startTime && !!form.endTime && (workHours.value as number) > 0)
 
+// ── Substitution ───────────────────────────────────────────────
+const substituteCompose = ref(false)
+
+const hasPendingSubstitution = computed(() =>
+  props.entry ? !!subStore.requestsForEntry(props.entry.id) : false,
+)
+
 // ── Chat / adjust request ──────────────────────────────────────
 const adjustCompose = ref(false)
 const adjustReason  = ref('')
@@ -511,6 +537,7 @@ const canSendAdjustRequest = computed(() =>
 watch(() => props.entry, () => {
   adjustCompose.value = false
   adjustReason.value = ''
+  substituteCompose.value = false
 })
 
 function openChat() {
@@ -695,6 +722,31 @@ function close() {
 .act-chip--revert:hover {
   background: rgba(239,68,68,0.06);
   border-color: rgba(239,68,68,0.55);
+}
+.act-chip--substitute {
+  background: transparent;
+  border-color: rgba(53,135,220,0.45);
+  color: #1d4ed8;
+}
+.act-chip--substitute:hover {
+  background: rgba(53,135,220,0.07);
+  border-color: rgba(53,135,220,0.7);
+}
+.act-chip--substitute-on {
+  background: #3587dc;
+  border-color: #3587dc;
+  color: #fff;
+}
+
+/* Pending substitution badge (shown in shift-info-card header) */
+.sub-pending-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 7px; border-radius: 10px;
+  font-size: 10px; font-weight: 600;
+  background: rgba(245,158,11,0.12);
+  color: #b45309;
+  border: 1px solid rgba(245,158,11,0.3);
+  white-space: nowrap;
 }
 
 /* Locked state (published) */
