@@ -137,17 +137,18 @@
                   </div>
                 </div>
 
-                <!-- Day-off -->
+                <!-- Day-off (shown at slot position on timeline) -->
                 <div
                   v-else
-                  class="dayoff-badge"
-                  :style="{ left: `${8 * PX_PER_HOUR}px` }"
+                  class="shift-bar shift-bar--dayoff"
+                  :style="barStyle(row.entry)"
                   style="cursor: pointer"
                   @click="openEditor(row.entry)"
                 >
-                  <v-chip size="x-small" variant="tonal" prepend-icon="mdi-sleep">
-                    {{ row.entry.cellStatus === 'DAY_OFF_CONFIRMED' ? '休み確定' : '休み希望' }}
-                  </v-chip>
+                  <div class="shift-bar__inner">
+                    <v-icon size="10" style="opacity:0.75">mdi-sleep</v-icon>
+                    <span class="shift-bar__time">{{ row.entry.startTime }}–{{ row.entry.endTime }}</span>
+                  </div>
                 </div>
 
                 <!-- Adjusting warning dot -->
@@ -349,12 +350,7 @@ const deptGroups = computed(() => {
   }
 
   for (const [, rows] of groups) {
-    rows.sort((a, b) => {
-      const aOff = isDayOff(a.entry.cellStatus)
-      const bOff = isDayOff(b.entry.cellStatus)
-      if (aOff !== bOff) return aOff ? 1 : -1
-      return a.entry.startTime.localeCompare(b.entry.startTime)
-    })
+    rows.sort((a, b) => a.entry.startTime.localeCompare(b.entry.startTime))
   }
 
   return Array.from(groups.entries())
@@ -642,12 +638,10 @@ const statColPx = `${STAT_COL_PX}px`
 .shift-bar--confirmed  { background: #3587dc; color: #fff; }
 .shift-bar--requested  { background: rgba(53,135,220,0.12); border: 1.5px solid #3587dc; color: #1d4ed8; }
 .shift-bar--adjusting  { background: #f59e0b; color: #1c1917; }
+.shift-bar--dayoff     { background: rgba(100,116,139,0.10); border: 1.5px dashed #94a3b8; color: #64748b; }
 
 .shift-bar__inner { display: flex; align-items: center; gap: 4px; padding: 0 8px; overflow: hidden; white-space: nowrap; }
 .shift-bar__time  { font-size: 10px; font-weight: 600; }
-
-/* ─── Day-off badge ────────────────────────────────────────── */
-.dayoff-badge { position: absolute; top: 50%; transform: translateY(-50%); }
 
 /* ─── Adjusting dot ────────────────────────────────────────── */
 .adj-dot { position: absolute; top: 5px; }

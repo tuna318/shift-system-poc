@@ -5,7 +5,7 @@
         <v-icon :size="10" class="chip-icon flex-shrink-0">{{ statusIcon }}</v-icon>
         <span class="chip-status-label">{{ statusLabel }}</span>
       </div>
-      <div v-if="!isDayOff" class="chip-time-row">
+      <div class="chip-time-row">
         {{ entry.startTime }}〜{{ entry.endTime }}
       </div>
     </div>

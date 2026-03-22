@@ -186,13 +186,19 @@ function makeMonthEntries(
   }
 
   // Sprinkle a few day-off entries for realism
-  const dayOffPlan: Array<[string, number]> = [
-    ['emp-002', 8], ['emp-009', 14], ['emp-013', 20], ['emp-007', 25],
+  // Each entry maps to a specific shift slot (startTime/endTime), not the whole day.
+  // emp-009 and emp-007 (ホール) get two entries on day 14 — one per slot (ランチ + 夕番).
+  const dayOffPlan: Array<[string, number, string, string]> = [
+    ['emp-002', 9,  '07:00', '15:00'],  // キッチン 朝番 (月)
+    ['emp-009', 14, '10:00', '15:00'],  // ホール ランチ (土)
+    ['emp-009', 14, '15:00', '22:00'],  // ホール 夕番 (土)
+    ['emp-013', 20, '15:00', '22:00'],  // レジ 夕番 (金)
+    ['emp-007', 25, '15:00', '22:00'],  // ホール 夕番 (水)
   ]
-  for (const [empId, d] of dayOffPlan) {
+  for (const [empId, d, startTime, endTime] of dayOffPlan) {
     if (d <= days && !(profile === 'future' && (d % 5 === 0 || d % 7 === 3))) {
       const st: CellStatus = profile === 'past' ? 'DAY_OFF_CONFIRMED' : 'DAY_OFF_REQUESTED'
-      entries.push({ id: id(), employeeId: empId, shiftDate: dStr(year, month, d), startTime: '10:00', endTime: '18:00', department: employees.find(e => e.id === empId)!.department, cellStatus: st, estimatedWage: 0, note: '休み希望' })
+      entries.push({ id: id(), employeeId: empId, shiftDate: dStr(year, month, d), startTime, endTime, department: employees.find(e => e.id === empId)!.department, cellStatus: st, estimatedWage: 0, note: '休み希望' })
     }
   }
 

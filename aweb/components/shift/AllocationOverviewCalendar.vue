@@ -153,6 +153,26 @@
                     </div>
                   </div>
 
+                  <!-- ──── ADJUSTING: status strip ──── -->
+                  <AdjInfoStrip
+                    v-if="emp.entry.cellStatus === 'ADJUSTING'"
+                    :entry="emp.entry"
+                    :employee-id="emp.entry.employeeId"
+                    class="mt-1 mb-1"
+                  />
+
+                  <!-- ──── 調整依頼 compose ──── -->
+                  <v-expand-transition>
+                    <AdjRequestCompose
+                      v-if="adjustState.entryId === emp.entry.id && adjustState.mode === 'adjust'"
+                      :entry="emp.entry"
+                      :employee-id="emp.entry.employeeId"
+                      class="mb-2"
+                      @sent="clearState"
+                      @cancel="clearState"
+                    />
+                  </v-expand-transition>
+
                   <!-- ──── Inline: Revert confirm ──── -->
                   <v-expand-transition>
                     <div v-if="adjustState.entryId === emp.entry.id && adjustState.mode === 'revert'" class="inline-panel inline-panel--error">
@@ -438,7 +458,9 @@ function quickConfirm(entry: ShiftEntry, status: CellStatus) {
 }
 
 function toggleAdjust(entry: ShiftEntry) {
-  chatStore.openConversation(entry.employeeId)
+  if (adjustState.entryId === entry.id && adjustState.mode === 'adjust') { clearState(); return }
+  requestPanel.value = null
+  adjustState.entryId = entry.id; adjustState.mode = 'adjust'; adjustState.reason = ''
 }
 
 function toggleRevert(entry: ShiftEntry) {

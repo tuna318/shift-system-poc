@@ -403,14 +403,15 @@ const mainRef = ref<HTMLElement | null>(null)
   align-items: center;
 }
 
-/* Cell status classes — background intentionally removed;
-   status is communicated only by the ShiftEntryChip itself. */
+/* Cell status classes */
 .cell-confirmed,
 .cell-shift-requested,
-.cell-day-off,
-.cell-day-off-requested,
 .cell-adjusting,
 .cell-undecided {
   background-color: #FFFFFF;
+}
+.cell-day-off,
+.cell-day-off-requested {
+  background-color: rgba(100,116,139,0.07);
 }
 </style>
