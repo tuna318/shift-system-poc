@@ -3,13 +3,13 @@
     <div class="adj-strip-left">
       <v-icon size="13" class="adj-strip-icon">mdi-swap-horizontal-bold</v-icon>
       <span class="adj-strip-label">調整依頼中</span>
-      <div class="adj-strip-direction">
-        <span class="sc sc--xs" :class="srcStyle">{{ srcLabel }}</span>
-        <v-icon size="11" color="medium-emphasis">mdi-arrow-right</v-icon>
-        <span class="sc sc--xs" :class="targetStatus === 'CONFIRMED' ? 'sc--confirmed' : 'sc--dayoff-conf'">
-          {{ targetStatus === 'CONFIRMED' ? 'シフト確定' : '休み確定' }}
-        </span>
-      </div>
+      <span class="sc sc--xs" :class="(props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED') === 'SHIFT_REQUESTED' ? 'sc--shift-req' : 'sc--dayoff-req'">
+        {{ (props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED') === 'SHIFT_REQUESTED' ? 'シフト希望' : '休み希望' }}
+      </span>
+      <v-icon size="11" color="medium-emphasis">mdi-arrow-right</v-icon>
+      <span class="sc sc--xs adj-strip-intent" :class="targetStatus === 'CONFIRMED' ? 'sc--intent-work' : 'sc--intent-off'">
+        {{ targetStatus === 'CONFIRMED' ? '出勤依頼' : '休み打診' }}
+      </span>
     </div>
     <div class="adj-resp-badge" :class="`adj-resp-badge--${responseStatus.toLowerCase()}`">
       <v-icon size="11">{{ responseIcon }}</v-icon>
@@ -52,16 +52,6 @@ const targetStatus = computed<'CONFIRMED' | 'DAY_OFF_CONFIRMED'>(() =>
     ?? (props.entry.preAdjustStatus === 'SHIFT_REQUESTED' ? 'DAY_OFF_CONFIRMED' : 'CONFIRMED'),
 )
 
-const LABELS: Record<string, string> = {
-  SHIFT_REQUESTED: 'シフト希望', DAY_OFF_REQUESTED: '休み希望',
-  CONFIRMED: 'シフト確定', DAY_OFF_CONFIRMED: '休み確定', ADJUSTING: '調整中',
-}
-const STYLES: Record<string, string> = {
-  SHIFT_REQUESTED: 'sc--shift-req', DAY_OFF_REQUESTED: 'sc--dayoff-req',
-  CONFIRMED: 'sc--confirmed', DAY_OFF_CONFIRMED: 'sc--dayoff-conf',
-}
-const srcLabel = computed(() => LABELS[props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'] ?? '')
-const srcStyle = computed(() => STYLES[props.entry.preAdjustStatus ?? 'SHIFT_REQUESTED'] ?? 'sc--shift-req')
 </script>
 
 <style scoped>
@@ -97,8 +87,6 @@ const srcStyle = computed(() => STYLES[props.entry.preAdjustStatus ?? 'SHIFT_REQ
 .adj-info-strip--accepted .adj-strip-label { color: #15803d; }
 .adj-info-strip--declined .adj-strip-label { color: #b91c1c; }
 
-.adj-strip-direction { display: flex; align-items: center; gap: 4px; }
-
 .adj-resp-badge {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 8px; border-radius: 20px;
@@ -108,15 +96,15 @@ const srcStyle = computed(() => STYLES[props.entry.preAdjustStatus ?? 'SHIFT_REQ
 .adj-resp-badge--accepted { background: rgba(22,163,74,0.15);  color: #15803d; }
 .adj-resp-badge--declined { background: rgba(220,38,38,0.12);  color: #b91c1c; }
 
-/* Status chips */
+/* Intent chip */
 .sc {
   display: inline-flex; align-items: center;
   padding: 2px 7px; border-radius: 10px;
   font-size: 11px; font-weight: 600; border: 1.5px solid transparent;
 }
-.sc--xs         { padding: 1px 6px; font-size: 10px; }
-.sc--shift-req  { background: transparent; border-color: #3587dc; color: #1d4ed8; }
-.sc--dayoff-req { background: transparent; border-color: #64748b; color: #475569; }
-.sc--confirmed  { background: #3587dc;     border-color: #3587dc; color: #fff; }
-.sc--dayoff-conf{ background: #64748b;     border-color: #64748b; color: #fff; }
+.sc--xs            { padding: 1px 6px; font-size: 10px; }
+.sc--shift-req     { background: transparent; border-color: #3587dc; color: #1d4ed8; }
+.sc--dayoff-req    { background: transparent; border-color: #64748b; color: #475569; }
+.sc--intent-work   { background: rgba(37,99,235,0.1); border-color: #3587dc; color: #1d4ed8; }
+.sc--intent-off    { background: rgba(100,116,139,0.1); border-color: #64748b; color: #475569; }
 </style>

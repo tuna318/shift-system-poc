@@ -148,9 +148,9 @@
                 <span class="sc" :class="`sc--${statusStyleKey(msg.adjustRequest.currentStatus)}`">
                   {{ statusLabel(msg.adjustRequest.currentStatus) }}
                 </span>
-                <v-icon size="14" color="warning">mdi-arrow-right-bold</v-icon>
-                <span class="sc" :class="msg.adjustRequest.targetStatus === 'CONFIRMED' ? 'sc--confirmed' : 'sc--dayoff-conf'">
-                  {{ msg.adjustRequest.targetStatus === 'CONFIRMED' ? 'シフト確定' : '休み確定' }}
+                <v-icon size="14" color="medium-emphasis">mdi-arrow-right</v-icon>
+                <span class="sc" :class="msg.adjustRequest.targetStatus === 'CONFIRMED' ? 'sc--intent-work' : 'sc--intent-off'">
+                  {{ msg.adjustRequest.targetStatus === 'CONFIRMED' ? '出勤依頼' : '休み打診' }}
                 </span>
               </div>
               <div v-if="msg.body" class="adj-card-body">{{ msg.body }}</div>
@@ -640,6 +640,8 @@ function relativeTime(iso: string): string {
 .sc--dayoff-req  { background: transparent; border-color: #64748b; color: #475569; }
 .sc--dayoff-conf { background: #64748b;     border-color: #64748b; color: #fff;    }
 .sc--adjusting   { background: #f59e0b;     border-color: #d97706; color: #1c1917; }
+.sc--intent-work { background: rgba(37,99,235,0.1); border-color: #3587dc; color: #1d4ed8; }
+.sc--intent-off  { background: rgba(100,116,139,0.1); border-color: #64748b; color: #475569; }
 
 /* ── Thread input ── */
 .thread-input {

@@ -3,11 +3,13 @@
     <div class="adj-compose-header">
       <v-icon size="13" color="warning">mdi-swap-horizontal-bold</v-icon>
       <span class="adj-compose-title">調整依頼の内容</span>
-      <div class="adj-compose-direction">
-        <span class="sc sc--sm" :class="srcStyle">{{ srcLabel }}</span>
+      <div class="adj-compose-chips">
+        <span class="sc sc--sm" :class="props.entry.cellStatus === 'SHIFT_REQUESTED' ? 'sc--shift-req' : 'sc--dayoff-req'">
+          {{ props.entry.cellStatus === 'SHIFT_REQUESTED' ? 'シフト希望' : '休み希望' }}
+        </span>
         <v-icon size="12" color="medium-emphasis">mdi-arrow-right</v-icon>
-        <span class="sc sc--sm" :class="targetStatus === 'CONFIRMED' ? 'sc--confirmed' : 'sc--dayoff-conf'">
-          {{ targetStatus === 'CONFIRMED' ? 'シフト確定' : '休み確定' }}
+        <span class="sc sc--sm" :class="targetStatus === 'CONFIRMED' ? 'sc--intent-work' : 'sc--intent-off'">
+          {{ targetStatus === 'CONFIRMED' ? '出勤依頼' : '休み打診' }}
         </span>
       </div>
     </div>
@@ -53,16 +55,6 @@ const targetStatus = computed<'CONFIRMED' | 'DAY_OFF_CONFIRMED'>(() =>
   props.entry.cellStatus === 'SHIFT_REQUESTED' ? 'DAY_OFF_CONFIRMED' : 'CONFIRMED',
 )
 
-const LABELS: Record<string, string> = {
-  SHIFT_REQUESTED: 'シフト希望', DAY_OFF_REQUESTED: '休み希望',
-  CONFIRMED: 'シフト確定', DAY_OFF_CONFIRMED: '休み確定',
-}
-const STYLES: Record<string, string> = {
-  SHIFT_REQUESTED: 'sc--shift-req', DAY_OFF_REQUESTED: 'sc--dayoff-req',
-  CONFIRMED: 'sc--confirmed', DAY_OFF_CONFIRMED: 'sc--dayoff-conf',
-}
-const srcLabel = computed(() => LABELS[props.entry.cellStatus] ?? '')
-const srcStyle = computed(() => STYLES[props.entry.cellStatus] ?? 'sc--shift-req')
 
 function send() {
   const body = reason.value.trim() || '調整をお願いできますか？'
@@ -106,19 +98,17 @@ function send() {
 .adj-compose-title {
   font-size: 12px; font-weight: 600; color: #92400e;
 }
-.adj-compose-direction {
-  display: flex; align-items: center; gap: 5px; margin-left: auto;
-}
+.adj-compose-chips { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 
-/* Status chips */
+/* Chips */
 .sc {
   display: inline-flex; align-items: center;
   padding: 2px 7px; border-radius: 10px;
   font-size: 11px; font-weight: 600; border: 1.5px solid transparent;
 }
-.sc--sm         { padding: 2px 6px; font-size: 11px; }
-.sc--shift-req  { background: transparent; border-color: #3587dc; color: #1d4ed8; }
-.sc--dayoff-req { background: transparent; border-color: #64748b; color: #475569; }
-.sc--confirmed  { background: #3587dc;     border-color: #3587dc; color: #fff; }
-.sc--dayoff-conf{ background: #64748b;     border-color: #64748b; color: #fff; }
+.sc--sm          { padding: 2px 6px; font-size: 11px; }
+.sc--shift-req   { background: transparent; border-color: #3587dc; color: #1d4ed8; }
+.sc--dayoff-req  { background: transparent; border-color: #64748b; color: #475569; }
+.sc--intent-work { background: rgba(37,99,235,0.1); border-color: #3587dc; color: #1d4ed8; }
+.sc--intent-off  { background: rgba(100,116,139,0.1); border-color: #64748b; color: #475569; }
 </style>
