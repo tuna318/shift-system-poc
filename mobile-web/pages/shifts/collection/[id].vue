@@ -1,17 +1,28 @@
 <template>
   <div class="pa-4">
-    <!-- Month selector -->
-    <div class="d-flex align-center justify-space-between mb-4">
-      <v-btn icon="mdi-chevron-left" variant="text" size="small" @click="prevMonth" />
+    <!-- Collection info banner -->
+    <v-alert
+      v-if="collection"
+      type="info"
+      variant="tonal"
+      rounded="xl"
+      density="compact"
+      class="mb-4"
+    >
+      <div class="text-body-2 font-weight-medium">{{ collection.name }}</div>
+      <div class="text-caption">提出期限: {{ deadlineLabel }}</div>
+    </v-alert>
+
+    <!-- Month display (read-only, locked to collection period) -->
+    <div class="d-flex align-center justify-center mb-4">
       <span class="text-subtitle-1 font-weight-bold">{{ displayMonth }}</span>
-      <v-btn icon="mdi-chevron-right" variant="text" size="small" @click="nextMonth" />
     </div>
 
     <p class="text-body-2 text-grey mb-4">
-      各日をタップして希望を入力してください。
+      各日をタップして出勤希望を入力してください。
     </p>
 
-    <!-- Calendar with multi-select -->
+    <!-- Calendar -->
     <v-card rounded="xl" elevation="0" variant="outlined" class="mb-4 overflow-hidden">
       <div class="shift-calendar pa-3">
         <div v-for="d in dayHeaders" :key="d" class="cal-header" :class="{ 'text-error': d === '日', 'text-primary': d === '土' }">
@@ -23,15 +34,13 @@
           :key="day"
           class="cal-day"
           :class="getDayClass(day)"
-          @click="toggleDay(day)"
+          @click="openDaySheet(day)"
         >
           <span class="day-num" :class="{ 'text-error': isWeekend(day, 0), 'text-primary': isWeekend(day, 6) }">
             {{ day }}
           </span>
           <template v-if="getPreference(day)">
-            <span class="day-chip" :style="chipStyle(day)">
-              {{ chipLabel(day) }}
-            </span>
+            <span class="day-chip" :style="chipStyle(day)">{{ chipLabel(day) }}</span>
           </template>
         </div>
       </div>
@@ -54,11 +63,6 @@
           <div class="text-h6 font-weight-bold text-grey">{{ unavailableCount }}</div>
           <div class="text-caption text-grey">休み希望</div>
         </div>
-        <v-divider vertical />
-        <div class="text-center">
-          <div class="text-h6 font-weight-bold text-grey-lighten-1">{{ unsubCount }}</div>
-          <div class="text-caption text-grey">未入力</div>
-        </div>
       </v-card-text>
     </v-card>
 
@@ -66,15 +70,15 @@
     <div class="d-flex gap-3 mb-4 flex-wrap">
       <div class="d-flex align-center gap-1">
         <span style="width:10px;height:10px;border-radius:3px;background:#3587dc;display:inline-block;"></span>
-        <span class="text-caption text-grey">★ 第一希望</span>
+        <span class="text-caption text-grey">第一希望</span>
       </div>
       <div class="d-flex align-center gap-1">
         <span style="width:10px;height:10px;border-radius:3px;background:#EBF3FC;border:1px solid #3587dc;display:inline-block;"></span>
-        <span class="text-caption text-grey">○ 出勤可能</span>
+        <span class="text-caption text-grey">出勤可能</span>
       </div>
       <div class="d-flex align-center gap-1">
         <span style="width:10px;height:10px;border-radius:3px;background:#F3F4F6;display:inline-block;"></span>
-        <span class="text-caption text-grey">× 休み希望</span>
+        <span class="text-caption text-grey">休み希望</span>
       </div>
     </div>
 
@@ -84,7 +88,7 @@
       color="primary"
       size="large"
       rounded="xl"
-      :disabled="(preferredCount + availableCount + unavailableCount) === 0 || submitted"
+      :disabled="totalCount === 0 || submitted"
       @click="confirmSubmit = true"
     >
       <v-icon start>mdi-send</v-icon>
@@ -123,18 +127,13 @@
             <v-icon start>mdi-home-outline</v-icon>
             休み希望
           </v-btn>
-          <v-btn
-            variant="outlined"
-            rounded="lg"
-            color="error"
-            @click="clearDay"
-          >
+          <v-btn variant="outlined" rounded="lg" color="error" @click="clearDay">
             <v-icon start>mdi-delete-outline</v-icon>
             クリア
           </v-btn>
         </div>
 
-        <!-- Time range for work preferences -->
+        <!-- Time range -->
         <div v-if="editAvail === 'PREFERRED' || editAvail === 'AVAILABLE'" class="mt-4">
           <div class="text-caption text-grey mb-2">希望時間帯（任意）</div>
           <div class="d-flex align-center gap-2">
@@ -163,12 +162,8 @@
         </div>
 
         <div class="d-flex gap-2 mt-4">
-          <v-btn variant="outlined" rounded="lg" class="flex-1-1" @click="editSheet = false">
-            キャンセル
-          </v-btn>
-          <v-btn color="primary" rounded="lg" class="flex-1-1" @click="saveEditDay">
-            保存
-          </v-btn>
+          <v-btn variant="outlined" rounded="lg" class="flex-1-1" @click="editSheet = false">キャンセル</v-btn>
+          <v-btn color="primary" rounded="lg" class="flex-1-1" @click="saveDay">保存</v-btn>
         </div>
       </v-card>
     </v-bottom-sheet>
@@ -184,12 +179,8 @@
             第一希望: {{ preferredCount }}日 / 出勤可能: {{ availableCount }}日 / 休み希望: {{ unavailableCount }}日
           </div>
           <div class="d-flex gap-2">
-            <v-btn variant="outlined" rounded="lg" class="flex-1-1" @click="confirmSubmit = false">
-              戻る
-            </v-btn>
-            <v-btn color="primary" rounded="lg" class="flex-1-1" @click="doSubmit">
-              提出する
-            </v-btn>
+            <v-btn variant="outlined" rounded="lg" class="flex-1-1" @click="confirmSubmit = false">戻る</v-btn>
+            <v-btn color="primary" rounded="lg" class="flex-1-1" @click="doSubmit">提出する</v-btn>
           </div>
         </v-card-text>
       </v-card>
@@ -200,33 +191,44 @@
 <script setup lang="ts">
 import type { PreferenceAvailability } from '~/types'
 
-const appStore = useAppStore()
+const route = useRoute()
 const shiftStore = useShiftStore()
+const appStore = useAppStore()
 
-const today = new Date()
-// Default to next month for preference submission
-const currentYear = ref(today.getFullYear())
-const currentMonth = ref(today.getMonth() + 2 > 12 ? 1 : today.getMonth() + 2)
+const collectionId = computed(() => route.params.id as string)
+const collection = computed(() => shiftStore.collection?.id === collectionId.value ? shiftStore.collection : null)
 
-const displayMonth = computed(() => `${currentYear.value}年${currentMonth.value}月`)
+const periodDate = computed(() => {
+  if (!collection.value) return { year: 2026, month: 4 }
+  const d = new Date(collection.value.periodStart)
+  return { year: d.getFullYear(), month: d.getMonth() + 1 }
+})
+
+const displayMonth = computed(() => `${periodDate.value.year}年${periodDate.value.month}月`)
+const deadlineLabel = computed(() => {
+  if (!collection.value) return ''
+  const d = new Date(collection.value.deadline)
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+})
+
 const dayHeaders = ['日', '月', '火', '水', '木', '金', '土']
 
-const leadingBlanks = computed(() =>
-  new Date(currentYear.value, currentMonth.value - 1, 1).getDay()
-)
+const leadingBlanks = computed(() => {
+  return new Date(periodDate.value.year, periodDate.value.month - 1, 1).getDay()
+})
 
-const daysInMonth = computed(() =>
-  new Date(currentYear.value, currentMonth.value, 0).getDate()
-)
+const daysInMonth = computed(() => {
+  return new Date(periodDate.value.year, periodDate.value.month, 0).getDate()
+})
 
 type LocalPref = { availability: PreferenceAvailability; start?: string; end?: string }
 const prefs = ref<Map<number, LocalPref>>(new Map())
 
 function dateStr(day: number) {
-  return `${currentYear.value}-${String(currentMonth.value).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  return `${periodDate.value.year}-${String(periodDate.value.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-function getPreference(day: number): LocalPref | undefined {
+function getPreference(day: number) {
   return prefs.value.get(day)
 }
 
@@ -255,20 +257,9 @@ function chipStyle(day: number) {
 }
 
 function isWeekend(day: number, targetDay: number) {
-  return new Date(currentYear.value, currentMonth.value - 1, day).getDay() === targetDay
+  return new Date(periodDate.value.year, periodDate.value.month - 1, day).getDay() === targetDay
 }
 
-function prevMonth() {
-  if (currentMonth.value === 1) { currentMonth.value = 12; currentYear.value-- }
-  else currentMonth.value--
-}
-
-function nextMonth() {
-  if (currentMonth.value === 12) { currentMonth.value = 1; currentYear.value++ }
-  else currentMonth.value++
-}
-
-// Edit sheet
 const editSheet = ref(false)
 const editDay = ref<number | null>(null)
 const editAvail = ref<PreferenceAvailability | null>(null)
@@ -277,14 +268,14 @@ const editEnd = ref('16:00')
 
 const editDayLabel = computed(() => {
   if (!editDay.value) return ''
-  const d = new Date(currentYear.value, currentMonth.value - 1, editDay.value)
+  const d = new Date(periodDate.value.year, periodDate.value.month - 1, editDay.value)
   const dow = ['日', '月', '火', '水', '木', '金', '土']
-  return `${currentMonth.value}/${editDay.value} (${dow[d.getDay()]})`
+  return `${periodDate.value.month}/${editDay.value} (${dow[d.getDay()]})`
 })
 
 const timeOptions = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`)
 
-function toggleDay(day: number) {
+function openDaySheet(day: number) {
   editDay.value = day
   const existing = prefs.value.get(day)
   editAvail.value = existing?.availability ?? 'PREFERRED'
@@ -293,7 +284,7 @@ function toggleDay(day: number) {
   editSheet.value = true
 }
 
-function saveEditDay() {
+function saveDay() {
   if (!editDay.value || !editAvail.value) return
   prefs.value.set(editDay.value, {
     availability: editAvail.value,
@@ -311,12 +302,19 @@ function clearDay() {
 const preferredCount = computed(() => [...prefs.value.values()].filter((p) => p.availability === 'PREFERRED').length)
 const availableCount = computed(() => [...prefs.value.values()].filter((p) => p.availability === 'AVAILABLE').length)
 const unavailableCount = computed(() => [...prefs.value.values()].filter((p) => p.availability === 'UNAVAILABLE').length)
-const unsubCount = computed(() => daysInMonth.value - prefs.value.size)
+const totalCount = computed(() => prefs.value.size)
 
 const confirmSubmit = ref(false)
 const submitted = ref(false)
 
 function doSubmit() {
+  const entries = [...prefs.value.entries()].map(([day, p]) => ({
+    date: dateStr(day),
+    availability: p.availability,
+    start: p.start,
+    end: p.end,
+  }))
+  shiftStore.submitPreferences(collectionId.value, entries)
   submitted.value = true
   confirmSubmit.value = false
   appStore.showSnackbar(`${displayMonth.value}の希望シフトを提出しました`, 'success')

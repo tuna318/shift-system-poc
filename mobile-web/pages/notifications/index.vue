@@ -43,16 +43,15 @@
 </template>
 
 <script setup lang="ts">
-import type { NotificationType } from '~/types'
-
 const { notifications } = useMockData()
 const appStore = useAppStore()
 
 const filters = [
   { label: 'すべて', value: 'ALL' },
+  { label: '調整依頼', value: 'ADJUSTMENT_REQUEST' },
+  { label: '代打', value: 'SUBSTITUTION_REQUEST' },
   { label: '修正依頼', value: 'CORRECTION_REQUEST' },
   { label: 'シフト', value: 'SHIFT' },
-  { label: '代打依頼', value: 'SUBSTITUTION_REQUEST' },
 ]
 
 const activeFilter = ref('ALL')
@@ -61,11 +60,15 @@ const filteredNotifications = computed(() => {
   if (activeFilter.value === 'ALL') return notifications.value
   if (activeFilter.value === 'SHIFT') {
     return notifications.value.filter((n) =>
-      n.type === 'SHIFT_CONFIRMED' || n.type === 'SHIFT_CHANGED' || n.type === 'SHIFT_REMINDER'
+      n.type === 'SHIFT_CONFIRMED' || n.type === 'SHIFT_CHANGED' ||
+      n.type === 'SHIFT_REMINDER' || n.type === 'SHIFT_PUBLISHED'
     )
   }
   return notifications.value.filter((n) => n.type === activeFilter.value)
 })
+
+const todayStr = new Date().toISOString().slice(0, 10)
+const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
 
 const groupedNotifications = computed(() => {
   const groups = new Map<string, typeof notifications.value>()
@@ -74,14 +77,11 @@ const groupedNotifications = computed(() => {
     groups.get(n.date)!.push(n)
   }
 
-  const today = '2026-03-01'
-  const yesterday = '2026-02-28'
-
   return [...groups.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([date, items]) => ({
       date,
-      dateLabel: date === today ? '今日' : date === yesterday ? '昨日' : date,
+      dateLabel: date === todayStr ? '今日' : date === yesterdayStr ? '昨日' : date,
       items,
     }))
 })
@@ -100,7 +100,11 @@ function handleTap(id: string) {
   // Navigate to related page
   if (n.type === 'CORRECTION_REQUEST' && n.relatedId) {
     navigateTo(`/attendance/${n.relatedId}`)
-  } else if (n.type === 'SHIFT_CONFIRMED' || n.type === 'SHIFT_CHANGED') {
+  } else if (n.type === 'ADJUSTMENT_REQUEST') {
+    navigateTo('/chat/emp-003')
+  } else if (n.type === 'SUBSTITUTION_REQUEST') {
+    navigateTo('/substitutions')
+  } else if (n.type === 'SHIFT_CONFIRMED' || n.type === 'SHIFT_CHANGED' || n.type === 'SHIFT_PUBLISHED') {
     navigateTo('/shifts')
   }
 }
