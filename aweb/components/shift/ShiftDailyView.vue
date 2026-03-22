@@ -140,7 +140,8 @@
                 <!-- Day-off (shown at slot position on timeline) -->
                 <div
                   v-else
-                  class="shift-bar shift-bar--dayoff"
+                  class="shift-bar"
+                  :class="row.entry.cellStatus === 'DAY_OFF_CONFIRMED' ? 'shift-bar--dayoff-conf' : 'shift-bar--dayoff-req'"
                   :style="barStyle(row.entry)"
                   style="cursor: pointer"
                   @click="openEditor(row.entry)"
@@ -635,10 +636,11 @@ const statColPx = `${STAT_COL_PX}px`
 }
 .shift-bar:hover { filter: brightness(0.93); box-shadow: 0 2px 6px rgba(0,0,0,0.18); }
 
-.shift-bar--confirmed  { background: #3587dc; color: #fff; }
-.shift-bar--requested  { background: rgba(53,135,220,0.12); border: 1.5px solid #3587dc; color: #1d4ed8; }
-.shift-bar--adjusting  { background: #f59e0b; color: #1c1917; }
-.shift-bar--dayoff     { background: rgba(100,116,139,0.10); border: 1.5px dashed #94a3b8; color: #64748b; }
+.shift-bar--confirmed    { background: #3587dc; color: #fff; }
+.shift-bar--requested    { background: rgba(53,135,220,0.12); border: 1.5px solid #3587dc; color: #1d4ed8; }
+.shift-bar--adjusting    { background: #f59e0b; color: #1c1917; }
+.shift-bar--dayoff-req   { background: rgba(100,116,139,0.10); border: 1.5px dashed #94a3b8; color: #64748b; }
+.shift-bar--dayoff-conf  { background: #64748b; border: 1.5px solid #64748b; color: #fff; }
 
 .shift-bar__inner { display: flex; align-items: center; gap: 4px; padding: 0 8px; overflow: hidden; white-space: nowrap; }
 .shift-bar__time  { font-size: 10px; font-weight: 600; }

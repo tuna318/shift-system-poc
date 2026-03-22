@@ -410,8 +410,10 @@ const mainRef = ref<HTMLElement | null>(null)
 .cell-undecided {
   background-color: #FFFFFF;
 }
-.cell-day-off,
 .cell-day-off-requested {
-  background-color: rgba(100,116,139,0.07);
+  background-color: rgba(100,116,139,0.06);
+}
+.cell-day-off {
+  background-color: rgba(100,116,139,0.14);
 }
 </style>
