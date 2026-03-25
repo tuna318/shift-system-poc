@@ -7,6 +7,11 @@ export const useShiftStore = defineStore('shiftEmployee', () => {
   const entries = ref<ShiftEntry[]>([...mockData.myShifts])
   const preferences = ref<ShiftPreference[]>([...mockData.myPreferences])
   const collection = ref(mockData.activeCollection)
+  const board = ref(mockData.marchBoard)
+
+  function getBoardLineup(date: string, slotId: string) {
+    return mockData.getBoardLineup(date, slotId)
+  }
 
   const today = computed(() => {
     const now = new Date()
@@ -81,6 +86,7 @@ export const useShiftStore = defineStore('shiftEmployee', () => {
     entries,
     preferences,
     collection,
+    board,
     todayEntry,
     adjustingEntries,
     upcomingConfirmed,
@@ -88,5 +94,6 @@ export const useShiftStore = defineStore('shiftEmployee', () => {
     submitPreferences,
     getPreferenceForDate,
     getShiftForDate,
+    getBoardLineup,
   }
 })

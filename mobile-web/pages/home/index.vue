@@ -57,29 +57,15 @@
         <div class="next-shift-card__footer">
           <span class="dept-chip">{{ nextShift.department }}</span>
           <span class="duration-label">{{ nextShift.durationLabel }}</span>
+          <button class="calendar-link" @click.stop="navigateTo('/shifts')">
+            <v-icon size="14">mdi-calendar-outline</v-icon>
+            カレンダーを見る
+          </button>
         </div>
       </div>
       <div v-else class="empty-card">
         <v-icon size="32" color="grey-lighten-2">mdi-calendar-blank-outline</v-icon>
         <div class="text-body-2 text-grey mt-1">予定されているシフトはありません</div>
-      </div>
-    </div>
-
-    <!-- Upcoming shifts (compact, after next) -->
-    <div v-if="moreShifts.length > 0" class="home-section">
-      <div class="section-label">今後の予定</div>
-      <div class="upcoming-list">
-        <div
-          v-for="s in moreShifts"
-          :key="s.id"
-          class="upcoming-row"
-          @click="navigateTo(`/shifts/${s.id}`)"
-        >
-          <div class="upcoming-row__date">{{ s.shortLabel }}</div>
-          <div class="upcoming-row__time">{{ s.startTime }}〜{{ s.endTime }}</div>
-          <div class="upcoming-row__dept">{{ s.department }}</div>
-          <v-icon size="16" color="grey-lighten-1">mdi-chevron-right</v-icon>
-        </div>
       </div>
     </div>
 
@@ -204,12 +190,6 @@ const nextShift = computed(() => {
   }
 })
 
-const moreShifts = computed(() =>
-  allFuture.value.slice(1, 4).map((s) => ({
-    ...s,
-    shortLabel: formatShiftDate(s.date),
-  }))
-)
 
 // ── Monthly hours ────────────────────────────────────────────────
 const maxHours = computed(() => employee.value?.employmentType === 'FULL_TIME' ? 176 : 120)
@@ -339,6 +319,20 @@ function doPunch(type: string) {
 .duration-label {
   font-size: 12px;
   color: #9e9e9e;
+  flex: 1;
+}
+.calendar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3587dc;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
 }
 
 .empty-card {
@@ -347,40 +341,6 @@ function doPunch(type: string) {
   border: 1px solid #e8e8e8;
   padding: 28px 16px;
   text-align: center;
-}
-
-/* ── Upcoming list ────────────────────────────────────────────── */
-.upcoming-list {
-  background: #ffffff;
-  border-radius: 16px;
-  border: 1px solid #e8e8e8;
-  overflow: hidden;
-}
-.upcoming-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.upcoming-row + .upcoming-row { border-top: 1px solid #f0f0f0; }
-.upcoming-row:active { background: #f8f8f8; }
-.upcoming-row__date {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1a1a1a;
-  width: 88px;
-  flex-shrink: 0;
-}
-.upcoming-row__time {
-  font-size: 13px;
-  color: #424242;
-  flex: 1;
-}
-.upcoming-row__dept {
-  font-size: 12px;
-  color: #9e9e9e;
 }
 
 /* ── Monthly hours ────────────────────────────────────────────── */

@@ -64,6 +64,18 @@ export const useMockData = () => {
   ]
 
   // ── Active collection request for April ─────────────────────────────────────
+  // Slots: 朝番 09-15, 夕番 15-22. All 30 days in April have both slots.
+  const aprSlots: import('~/types').ShiftSlot[] = [
+    { id: 'apr-s1', label: '朝番', startTime: '09:00', endTime: '15:00', color: '#3587dc' },
+    { id: 'apr-s2', label: '夕番', startTime: '15:00', endTime: '22:00', color: '#f8c076' },
+  ]
+  const aprAssignments: import('~/types').DaySlotAssignment[] = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(2026, 3, i + 1) // April 2026
+    const dow = d.getDay()
+    // Sundays: only 夕番; all other days: both
+    return { date: d.toISOString().slice(0, 10), slotIds: dow === 0 ? ['apr-s2'] : ['apr-s1', 'apr-s2'] }
+  })
+
   const activeCollection: CollectionRequest = {
     id: 'coll-002',
     name: '2026年4月 シフト収集',
@@ -71,6 +83,58 @@ export const useMockData = () => {
     periodStart: '2026-04-01',
     periodEnd: '2026-04-30',
     deadline: '2026-03-25',
+    allocationSetup: { slots: aprSlots, assignments: aprAssignments },
+  }
+
+  // ── March shift board ────────────────────────────────────────────────────────
+  const marSlots: import('~/types').ShiftSlot[] = [
+    { id: 'mar-s1', label: '朝番', startTime: '09:00', endTime: '15:00', color: '#3587dc' },
+    { id: 'mar-s2', label: '夕番', startTime: '15:00', endTime: '22:00', color: '#f8c076' },
+  ]
+  const marAssignments: import('~/types').DaySlotAssignment[] = Array.from({ length: 31 }, (_, i) => {
+    const d = new Date(2026, 2, i + 1)
+    return { date: d.toISOString().slice(0, 10), slotIds: d.getDay() === 0 ? ['mar-s2'] : ['mar-s1', 'mar-s2'] }
+  })
+
+  const marchBoard: import('~/types').ShiftBoardInfo = {
+    id: 'board-2026-03',
+    name: '2026年3月 シフトボード',
+    status: 'PUBLISHED',
+    periodStart: '2026-03-01',
+    periodEnd: '2026-03-31',
+    allocationSetup: { slots: marSlots, assignments: marAssignments },
+    collectionId: 'coll-002',
+  }
+
+  // Fixed colleagues per slot for the board lineup display
+  const SLOT_COLLEAGUES: Record<string, import('~/types').BoardEntry[]> = {
+    'mar-s1': [
+      { employeeId: 'emp-002', name: '鈴木 梅子', department: 'ホール',   role: 'ホールリーダー' },
+      { employeeId: 'emp-001', name: '山田 太郎', department: 'キッチン', role: 'キッチンリーダー' },
+      { employeeId: 'emp-004', name: '中村 彩',   department: 'キッチン', role: 'クルー' },
+      { employeeId: 'emp-007', name: '木村 誠',   department: 'レジ',     role: 'レジリーダー' },
+    ],
+    'mar-s2': [
+      { employeeId: 'emp-005', name: '伊藤 智子', department: 'ホール',   role: 'ホールリーダー' },
+      { employeeId: 'emp-006', name: '高橋 愛',   department: 'ホール',   role: 'クルー' },
+      { employeeId: 'emp-008', name: '小林 健二', department: 'キッチン', role: 'キッチンリーダー' },
+    ],
+  }
+
+  function getBoardLineup(date: string, slotId: string): import('~/types').BoardEntry[] {
+    const colleagues = (SLOT_COLLEAGUES[slotId] ?? []).map(e => ({ ...e }))
+    // Include current user (emp-003 / 田中花子) if she has a confirmed shift on this date
+    const myShift = myShifts.find(s => s.date === date)
+    if (myShift && (slotId === 'mar-s1' ? myShift.startTime < '15:00' : myShift.startTime >= '15:00')) {
+      colleagues.push({
+        employeeId: 'emp-003',
+        name: '田中 花子',
+        department: myShift.department,
+        role: 'クルー',
+        isCurrentUser: true,
+      })
+    }
+    return colleagues
   }
 
   // ── Attendance records for February + March 2026 ────────────────────────────
@@ -296,6 +360,8 @@ export const useMockData = () => {
     myShifts,
     myPreferences,
     activeCollection,
+    marchBoard,
+    getBoardLineup,
     myAttendance,
     currentPunchStatus,
     substitutionRequests,

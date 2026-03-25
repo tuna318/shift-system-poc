@@ -99,6 +99,7 @@ const pageTitle = computed(() => {
   if (route.path.startsWith('/attendance/'))        return '勤怠詳細'
   if (route.path.startsWith('/chat/'))              return 'チャット'
   if (route.path.startsWith('/shifts/collection/')) return 'シフト希望提出'
+  if (route.path.startsWith('/shifts/board/'))      return 'シフトボード'
   if (route.path.startsWith('/shifts/') && route.path !== '/shifts' && route.path !== '/shifts/submit')
     return 'シフト詳細'
   return pageTitles[route.path] ?? 'Sugeシフト'
@@ -111,6 +112,7 @@ const canGoBack = computed(() =>
   route.path.startsWith('/attendance/') ||
   route.path.startsWith('/chat/') ||
   route.path.startsWith('/shifts/collection/') ||
+  route.path.startsWith('/shifts/board/') ||
   (route.path.startsWith('/shifts/') && route.path !== '/shifts') ||
   (route.path.startsWith('/substitutions/') && route.path !== '/substitutions')
 )

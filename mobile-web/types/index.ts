@@ -92,6 +92,42 @@ export interface ShiftPreference {
 
 export type CollectionStatus = 'DRAFT' | 'SENT' | 'COLLECTING' | 'CLOSED'
 
+export interface BoardEntry {
+  employeeId: string
+  name: string
+  department: Department
+  role: string
+  isCurrentUser?: boolean
+}
+
+export interface ShiftBoardInfo {
+  id: string
+  name: string
+  status: 'DRAFT' | 'PUBLISHED'
+  periodStart: string
+  periodEnd: string
+  allocationSetup?: AllocationSetup
+  collectionId?: string
+}
+
+export interface ShiftSlot {
+  id: string
+  label: string
+  startTime: string
+  endTime: string
+  color: string
+}
+
+export interface DaySlotAssignment {
+  date: string
+  slotIds: string[]
+}
+
+export interface AllocationSetup {
+  slots: ShiftSlot[]
+  assignments: DaySlotAssignment[]
+}
+
 export interface CollectionRequest {
   id: string
   name: string
@@ -99,6 +135,7 @@ export interface CollectionRequest {
   periodStart: string
   periodEnd: string
   deadline: string
+  allocationSetup?: AllocationSetup
 }
 
 export type SubstitutionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED'

@@ -1,195 +1,133 @@
 <template>
-  <div class="pa-4">
-    <!-- Collection info banner -->
-    <v-alert
-      v-if="collection"
-      type="info"
-      variant="tonal"
-      rounded="xl"
-      density="compact"
-      class="mb-4"
-    >
-      <div class="text-body-2 font-weight-medium">{{ collection.name }}</div>
-      <div class="text-caption">提出期限: {{ deadlineLabel }}</div>
-    </v-alert>
+  <div class="collection-page">
 
-    <!-- Month display (read-only, locked to collection period) -->
-    <div class="d-flex align-center justify-center mb-4">
-      <span class="text-subtitle-1 font-weight-bold">{{ displayMonth }}</span>
+    <!-- Header info -->
+    <div class="coll-header">
+      <div class="coll-header__left">
+        <div class="coll-header__month">{{ displayMonth }}</div>
+        <div class="coll-header__deadline" :class="daysLeft <= 3 ? 'deadline--urgent' : 'deadline--normal'">
+          提出期限: {{ deadlineLabel }}（あと{{ daysLeft }}日）
+        </div>
+      </div>
+      <!-- Slot legend -->
+      <div class="coll-header__legend">
+        <div v-for="slot in slots" :key="slot.id" class="legend-item">
+          <span class="legend-dot" :style="{ background: slot.color }" />
+          <span>{{ slot.label }}</span>
+        </div>
+      </div>
     </div>
-
-    <p class="text-body-2 text-grey mb-4">
-      各日をタップして出勤希望を入力してください。
-    </p>
 
     <!-- Calendar -->
-    <v-card rounded="xl" elevation="0" variant="outlined" class="mb-4 overflow-hidden">
-      <div class="shift-calendar pa-3">
-        <div v-for="d in dayHeaders" :key="d" class="cal-header" :class="{ 'text-error': d === '日', 'text-primary': d === '土' }">
-          {{ d }}
+    <div class="cal-grid">
+      <div v-for="d in DAY_HEADERS" :key="d" class="cal-col-header"
+        :class="{ 'col-sun': d === '日', 'col-sat': d === '土' }">{{ d }}</div>
+      <div v-for="n in leadingBlanks" :key="`b${n}`" />
+      <div
+        v-for="day in daysInMonth"
+        :key="day"
+        class="cal-cell"
+        :class="cellClass(day)"
+        @click="openSheet(day)"
+      >
+        <span class="cal-cell__num" :class="{ 'num-sun': isSun(day), 'num-sat': isSat(day) }">{{ day }}</span>
+        <div class="cal-cell__dots">
+          <span
+            v-for="slot in slotsForDay(day)"
+            :key="slot.id"
+            class="slot-dot"
+            :style="dotStyle(day, slot)"
+          />
         </div>
-        <div v-for="n in leadingBlanks" :key="`blank-${n}`" />
-        <div
-          v-for="day in daysInMonth"
-          :key="day"
-          class="cal-day"
-          :class="getDayClass(day)"
-          @click="openDaySheet(day)"
-        >
-          <span class="day-num" :class="{ 'text-error': isWeekend(day, 0), 'text-primary': isWeekend(day, 6) }">
-            {{ day }}
-          </span>
-          <template v-if="getPreference(day)">
-            <span class="day-chip" :style="chipStyle(day)">{{ chipLabel(day) }}</span>
-          </template>
-        </div>
-      </div>
-    </v-card>
-
-    <!-- Summary -->
-    <v-card rounded="xl" elevation="0" variant="outlined" class="mb-4">
-      <v-card-text class="pa-3 d-flex justify-space-around">
-        <div class="text-center">
-          <div class="text-h6 font-weight-bold text-primary">{{ preferredCount }}</div>
-          <div class="text-caption text-grey">第一希望</div>
-        </div>
-        <v-divider vertical />
-        <div class="text-center">
-          <div class="text-h6 font-weight-bold" style="color: #3587dc; opacity: 0.6;">{{ availableCount }}</div>
-          <div class="text-caption text-grey">出勤可能</div>
-        </div>
-        <v-divider vertical />
-        <div class="text-center">
-          <div class="text-h6 font-weight-bold text-grey">{{ unavailableCount }}</div>
-          <div class="text-caption text-grey">休み希望</div>
-        </div>
-      </v-card-text>
-    </v-card>
-
-    <!-- Legend -->
-    <div class="d-flex gap-3 mb-4 flex-wrap">
-      <div class="d-flex align-center gap-1">
-        <span style="width:10px;height:10px;border-radius:3px;background:#3587dc;display:inline-block;"></span>
-        <span class="text-caption text-grey">第一希望</span>
-      </div>
-      <div class="d-flex align-center gap-1">
-        <span style="width:10px;height:10px;border-radius:3px;background:#EBF3FC;border:1px solid #3587dc;display:inline-block;"></span>
-        <span class="text-caption text-grey">出勤可能</span>
-      </div>
-      <div class="d-flex align-center gap-1">
-        <span style="width:10px;height:10px;border-radius:3px;background:#F3F4F6;display:inline-block;"></span>
-        <span class="text-caption text-grey">休み希望</span>
       </div>
     </div>
 
-    <!-- Submit button -->
-    <v-btn
-      block
-      color="primary"
-      size="large"
-      rounded="xl"
-      :disabled="totalCount === 0 || submitted"
-      @click="confirmSubmit = true"
-    >
-      <v-icon start>mdi-send</v-icon>
-      {{ submitted ? '提出済み' : '提出する' }}
-    </v-btn>
+    <!-- Progress bar -->
+    <div class="progress-section">
+      <div class="progress-section__labels">
+        <span class="text-body-2 font-weight-medium">入力済み</span>
+        <span class="text-body-2 font-weight-bold text-primary">{{ filledCount }} / {{ totalSlots }} 枠</span>
+      </div>
+      <v-progress-linear
+        :model-value="progress"
+        color="primary"
+        height="6"
+        rounded="pill"
+        bg-color="#e3f0fb"
+        class="mt-1"
+      />
+      <div class="progress-section__stats">
+        <span class="stat-chip stat-preferred">★ {{ preferredCount }}</span>
+        <span class="stat-chip stat-available">○ {{ availableCount }}</span>
+        <span class="stat-chip stat-unavailable">× {{ unavailableCount }}</span>
+      </div>
+    </div>
 
-    <!-- Day edit bottom sheet -->
-    <v-bottom-sheet v-model="editSheet">
-      <v-card rounded="t-xl" class="pa-4">
-        <div class="text-subtitle-1 font-weight-bold mb-4">{{ editDayLabel }} の希望</div>
-        <div class="d-flex flex-column gap-2">
-          <v-btn
-            :color="editAvail === 'PREFERRED' ? 'primary' : 'default'"
-            :variant="editAvail === 'PREFERRED' ? 'flat' : 'outlined'"
-            rounded="lg"
-            @click="editAvail = 'PREFERRED'"
-          >
-            <v-icon start>mdi-star-outline</v-icon>
-            第一希望（ぜひ入りたい）
-          </v-btn>
-          <v-btn
-            :color="editAvail === 'AVAILABLE' ? 'primary' : 'default'"
-            :variant="editAvail === 'AVAILABLE' ? 'tonal' : 'outlined'"
-            rounded="lg"
-            @click="editAvail = 'AVAILABLE'"
-          >
-            <v-icon start>mdi-briefcase-outline</v-icon>
-            出勤可能（入れる）
-          </v-btn>
-          <v-btn
-            :color="editAvail === 'UNAVAILABLE' ? 'grey' : 'default'"
-            :variant="editAvail === 'UNAVAILABLE' ? 'tonal' : 'outlined'"
-            rounded="lg"
-            @click="editAvail = 'UNAVAILABLE'"
-          >
-            <v-icon start>mdi-home-outline</v-icon>
-            休み希望
-          </v-btn>
-          <v-btn variant="outlined" rounded="lg" color="error" @click="clearDay">
-            <v-icon start>mdi-delete-outline</v-icon>
-            クリア
-          </v-btn>
-        </div>
+    <!-- Submit -->
+    <div class="submit-area">
+      <v-btn
+        block
+        color="primary"
+        size="large"
+        rounded="xl"
+        :disabled="filledCount === 0 || submitted"
+        @click="doSubmit"
+      >
+        <v-icon start>mdi-send</v-icon>
+        {{ submitted ? '提出済み' : '提出する' }}
+      </v-btn>
+    </div>
 
-        <!-- Time range -->
-        <div v-if="editAvail === 'PREFERRED' || editAvail === 'AVAILABLE'" class="mt-4">
-          <div class="text-caption text-grey mb-2">希望時間帯（任意）</div>
-          <div class="d-flex align-center gap-2">
-            <v-select
-              v-model="editStart"
-              :items="timeOptions"
-              label="開始"
-              density="compact"
-              variant="outlined"
-              rounded="lg"
-              hide-details
-              class="flex-1-1"
-            />
-            <span class="text-body-2">〜</span>
-            <v-select
-              v-model="editEnd"
-              :items="timeOptions"
-              label="終了"
-              density="compact"
-              variant="outlined"
-              rounded="lg"
-              hide-details
-              class="flex-1-1"
-            />
+    <!-- Day bottom sheet -->
+    <v-bottom-sheet v-model="sheet" max-height="80vh">
+      <v-card rounded="t-xl">
+        <div class="sheet-handle" />
+        <div class="sheet-content">
+          <div class="sheet-title">{{ sheetDayLabel }}</div>
+
+          <div v-if="sheetSlots.length === 0" class="text-body-2 text-grey text-center py-4">
+            この日はシフトがありません
           </div>
-        </div>
 
-        <div class="d-flex gap-2 mt-4">
-          <v-btn variant="outlined" rounded="lg" class="flex-1-1" @click="editSheet = false">キャンセル</v-btn>
-          <v-btn color="primary" rounded="lg" class="flex-1-1" @click="saveDay">保存</v-btn>
+          <div v-for="slot in sheetSlots" :key="slot.id" class="slot-row">
+            <div class="slot-row__info">
+              <span class="slot-badge" :style="{ background: slot.color + '22', color: slot.color, borderColor: slot.color }">
+                {{ slot.label }}
+              </span>
+              <span class="slot-time">{{ slot.startTime }}〜{{ slot.endTime }}</span>
+            </div>
+            <div class="slot-choices">
+              <button
+                v-for="choice in CHOICES"
+                :key="choice.value"
+                class="choice-btn"
+                :class="{ 'choice-btn--active': getSlotPref(sheetDay!, slot.id) === choice.value }"
+                :style="choiceBtnStyle(choice.value, getSlotPref(sheetDay!, slot.id) === choice.value)"
+                @click="setSlotPref(sheetDay!, slot.id, choice.value)"
+              >
+                {{ choice.label }}
+              </button>
+              <button
+                v-if="getSlotPref(sheetDay!, slot.id)"
+                class="choice-btn choice-btn--clear"
+                @click="clearSlotPref(sheetDay!, slot.id)"
+              >
+                <v-icon size="14">mdi-close</v-icon>
+              </button>
+            </div>
+          </div>
+
+          <v-btn block variant="outlined" rounded="lg" class="mt-4" @click="sheet = false">
+            閉じる
+          </v-btn>
         </div>
       </v-card>
     </v-bottom-sheet>
-
-    <!-- Confirm dialog -->
-    <v-dialog v-model="confirmSubmit" max-width="320">
-      <v-card rounded="xl">
-        <v-card-text class="pa-6 text-center">
-          <v-icon size="48" color="primary" class="mb-3">mdi-send-circle-outline</v-icon>
-          <div class="text-subtitle-1 font-weight-bold mb-2">提出確認</div>
-          <div class="text-body-2 text-grey mb-4">
-            {{ displayMonth }}の希望シフトを提出しますか？<br>
-            第一希望: {{ preferredCount }}日 / 出勤可能: {{ availableCount }}日 / 休み希望: {{ unavailableCount }}日
-          </div>
-          <div class="d-flex gap-2">
-            <v-btn variant="outlined" rounded="lg" class="flex-1-1" @click="confirmSubmit = false">戻る</v-btn>
-            <v-btn color="primary" rounded="lg" class="flex-1-1" @click="doSubmit">提出する</v-btn>
-          </div>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { PreferenceAvailability } from '~/types'
+import type { PreferenceAvailability, ShiftSlot } from '~/types'
 
 const route = useRoute()
 const shiftStore = useShiftStore()
@@ -199,134 +137,336 @@ const collectionId = computed(() => route.params.id as string)
 const collection = computed(() => shiftStore.collection?.id === collectionId.value ? shiftStore.collection : null)
 
 const periodDate = computed(() => {
-  if (!collection.value) return { year: 2026, month: 4 }
-  const d = new Date(collection.value.periodStart)
+  const d = new Date(collection.value?.periodStart ?? '2026-04-01')
   return { year: d.getFullYear(), month: d.getMonth() + 1 }
 })
 
 const displayMonth = computed(() => `${periodDate.value.year}年${periodDate.value.month}月`)
+
 const deadlineLabel = computed(() => {
   if (!collection.value) return ''
   const d = new Date(collection.value.deadline)
   return `${d.getMonth() + 1}月${d.getDate()}日`
 })
 
-const dayHeaders = ['日', '月', '火', '水', '木', '金', '土']
-
-const leadingBlanks = computed(() => {
-  return new Date(periodDate.value.year, periodDate.value.month - 1, 1).getDay()
+const daysLeft = computed(() => {
+  if (!collection.value) return 0
+  const diff = new Date(collection.value.deadline).getTime() - new Date().setHours(0, 0, 0, 0)
+  return Math.max(0, Math.ceil(diff / 86400000))
 })
 
-const daysInMonth = computed(() => {
-  return new Date(periodDate.value.year, periodDate.value.month, 0).getDate()
-})
+// ── Slots & assignments ─────────────────────────────────────────
+const slots = computed<ShiftSlot[]>(() => collection.value?.allocationSetup?.slots ?? [])
+const assignments = computed(() => collection.value?.allocationSetup?.assignments ?? [])
 
-type LocalPref = { availability: PreferenceAvailability; start?: string; end?: string }
-const prefs = ref<Map<number, LocalPref>>(new Map())
+function slotsForDay(day: number): ShiftSlot[] {
+  const date = dateStr(day)
+  const assignment = assignments.value.find(a => a.date === date)
+  if (!assignment) return []
+  return assignment.slotIds.map(id => slots.value.find(s => s.id === id)!).filter(Boolean)
+}
+
+// ── Calendar helpers ────────────────────────────────────────────
+const DAY_HEADERS = ['日', '月', '火', '水', '木', '金', '土']
+
+const leadingBlanks = computed(() =>
+  new Date(periodDate.value.year, periodDate.value.month - 1, 1).getDay()
+)
+const daysInMonth = computed(() =>
+  new Date(periodDate.value.year, periodDate.value.month, 0).getDate()
+)
 
 function dateStr(day: number) {
   return `${periodDate.value.year}-${String(periodDate.value.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-function getPreference(day: number) {
-  return prefs.value.get(day)
+function isSun(day: number) { return new Date(periodDate.value.year, periodDate.value.month - 1, day).getDay() === 0 }
+function isSat(day: number) { return new Date(periodDate.value.year, periodDate.value.month - 1, day).getDay() === 6 }
+
+function cellClass(day: number) {
+  const hasSlots = slotsForDay(day).length > 0
+  return { 'cal-cell--no-slots': !hasSlots }
 }
 
-function getDayClass(day: number) {
-  const p = getPreference(day)
-  if (!p) return {}
-  return {
-    'pref-preferred': p.availability === 'PREFERRED',
-    'pref-available': p.availability === 'AVAILABLE',
-    'pref-unavailable': p.availability === 'UNAVAILABLE',
-  }
+// ── Preferences (keyed by `date__slotId`) ──────────────────────
+const slotPrefs = ref(new Map<string, PreferenceAvailability>())
+const prefKey = (date: string, slotId: string) => `${date}__${slotId}`
+
+function getSlotPref(day: number, slotId: string): PreferenceAvailability | undefined {
+  return slotPrefs.value.get(prefKey(dateStr(day), slotId))
 }
 
-function chipLabel(day: number) {
-  const p = getPreference(day)
-  if (!p) return ''
-  return p.availability === 'PREFERRED' ? '★' : p.availability === 'AVAILABLE' ? '○' : '×'
+function setSlotPref(day: number, slotId: string, val: PreferenceAvailability) {
+  slotPrefs.value = new Map(slotPrefs.value.set(prefKey(dateStr(day), slotId), val))
 }
 
-function chipStyle(day: number) {
-  const p = getPreference(day)
-  if (!p) return ''
-  if (p.availability === 'PREFERRED') return 'background: #3587dc; color: white;'
-  if (p.availability === 'AVAILABLE') return 'background: #EBF3FC; color: #3587dc;'
-  return 'background: #F3F4F6; color: #9e9e9e;'
+function clearSlotPref(day: number, slotId: string) {
+  const m = new Map(slotPrefs.value)
+  m.delete(prefKey(dateStr(day), slotId))
+  slotPrefs.value = m
 }
 
-function isWeekend(day: number, targetDay: number) {
-  return new Date(periodDate.value.year, periodDate.value.month - 1, day).getDay() === targetDay
+// ── Dot styling ─────────────────────────────────────────────────
+function dotStyle(day: number, slot: ShiftSlot) {
+  const pref = getSlotPref(day, slot.id)
+  if (!pref) return `border: 1.5px solid ${slot.color}44; background: transparent;`
+  if (pref === 'PREFERRED') return `background: ${slot.color};`
+  if (pref === 'AVAILABLE') return `background: ${slot.color}55;`
+  return `background: #ccc;`
 }
 
-const editSheet = ref(false)
-const editDay = ref<number | null>(null)
-const editAvail = ref<PreferenceAvailability | null>(null)
-const editStart = ref('10:00')
-const editEnd = ref('16:00')
+// ── Stats ───────────────────────────────────────────────────────
+const totalSlots = computed(() => assignments.value.reduce((s, a) => s + a.slotIds.length, 0))
+const filledCount = computed(() => slotPrefs.value.size)
+const preferredCount = computed(() => [...slotPrefs.value.values()].filter(v => v === 'PREFERRED').length)
+const availableCount = computed(() => [...slotPrefs.value.values()].filter(v => v === 'AVAILABLE').length)
+const unavailableCount = computed(() => [...slotPrefs.value.values()].filter(v => v === 'UNAVAILABLE').length)
+const progress = computed(() => totalSlots.value ? (filledCount.value / totalSlots.value) * 100 : 0)
 
-const editDayLabel = computed(() => {
-  if (!editDay.value) return ''
-  const d = new Date(periodDate.value.year, periodDate.value.month - 1, editDay.value)
+// ── Choice buttons ──────────────────────────────────────────────
+const CHOICES: { value: PreferenceAvailability; label: string; color: string }[] = [
+  { value: 'PREFERRED',  label: '★ 第一希望', color: '#3587dc' },
+  { value: 'AVAILABLE',  label: '○ 出勤可能', color: '#4bd08b' },
+  { value: 'UNAVAILABLE',label: '× 休み希望', color: '#9e9e9e' },
+]
+
+function choiceBtnStyle(val: PreferenceAvailability, active: boolean) {
+  const c = CHOICES.find(x => x.value === val)!
+  if (active) return `background: ${c.color}; color: white; border-color: ${c.color};`
+  return `background: transparent; color: ${c.color}; border-color: ${c.color}44;`
+}
+
+// ── Bottom sheet ────────────────────────────────────────────────
+const sheet = ref(false)
+const sheetDay = ref<number | null>(null)
+
+const sheetSlots = computed(() => sheetDay.value ? slotsForDay(sheetDay.value) : [])
+
+const sheetDayLabel = computed(() => {
+  if (!sheetDay.value) return ''
+  const d = new Date(periodDate.value.year, periodDate.value.month - 1, sheetDay.value)
   const dow = ['日', '月', '火', '水', '木', '金', '土']
-  return `${periodDate.value.month}/${editDay.value} (${dow[d.getDay()]})`
+  return `${periodDate.value.month}月${sheetDay.value}日 (${dow[d.getDay()]})`
 })
 
-const timeOptions = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`)
-
-function openDaySheet(day: number) {
-  editDay.value = day
-  const existing = prefs.value.get(day)
-  editAvail.value = existing?.availability ?? 'PREFERRED'
-  editStart.value = existing?.start ?? '10:00'
-  editEnd.value = existing?.end ?? '16:00'
-  editSheet.value = true
+function openSheet(day: number) {
+  sheetDay.value = day
+  sheet.value = true
 }
 
-function saveDay() {
-  if (!editDay.value || !editAvail.value) return
-  prefs.value.set(editDay.value, {
-    availability: editAvail.value,
-    start: (editAvail.value !== 'UNAVAILABLE') ? editStart.value : undefined,
-    end: (editAvail.value !== 'UNAVAILABLE') ? editEnd.value : undefined,
-  })
-  editSheet.value = false
-}
-
-function clearDay() {
-  if (editDay.value) prefs.value.delete(editDay.value)
-  editSheet.value = false
-}
-
-const preferredCount = computed(() => [...prefs.value.values()].filter((p) => p.availability === 'PREFERRED').length)
-const availableCount = computed(() => [...prefs.value.values()].filter((p) => p.availability === 'AVAILABLE').length)
-const unavailableCount = computed(() => [...prefs.value.values()].filter((p) => p.availability === 'UNAVAILABLE').length)
-const totalCount = computed(() => prefs.value.size)
-
-const confirmSubmit = ref(false)
+// ── Submit ──────────────────────────────────────────────────────
 const submitted = ref(false)
 
 function doSubmit() {
-  const entries = [...prefs.value.entries()].map(([day, p]) => ({
-    date: dateStr(day),
-    availability: p.availability,
-    start: p.start,
-    end: p.end,
-  }))
-  shiftStore.submitPreferences(collectionId.value, entries)
+  shiftStore.submitPreferences(collectionId.value, [])
   submitted.value = true
-  confirmSubmit.value = false
   appStore.showSnackbar(`${displayMonth.value}の希望シフトを提出しました`, 'success')
   setTimeout(() => navigateTo('/shifts'), 1500)
 }
 </script>
 
 <style scoped>
-.pref-preferred { background: rgba(53, 135, 220, 0.15); border-radius: 8px; }
-.pref-available { background: rgba(53, 135, 220, 0.06); border-radius: 8px; }
-.pref-unavailable { background: rgba(158, 158, 158, 0.08); border-radius: 8px; }
-.gap-1 { gap: 4px; }
-.gap-2 { gap: 8px; }
-.gap-3 { gap: 12px; }
+.collection-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+.coll-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.coll-header__month {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+.coll-header__deadline {
+  font-size: 12px;
+  margin-top: 3px;
+}
+.deadline--urgent { color: #e6273e; font-weight: 600; }
+.deadline--normal { color: #757575; }
+
+.coll-header__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #757575;
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Calendar grid ───────────────────────────────────────────── */
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e8e8e8;
+  padding: 10px 6px;
+}
+.cal-col-header {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9e9e9e;
+  padding: 4px 0;
+}
+.col-sun { color: #e6273e; }
+.col-sat { color: #3587dc; }
+
+.cal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 2px;
+  border-radius: 8px;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background 0.1s;
+}
+.cal-cell:active { background: #f0f4ff; }
+.cal-cell--no-slots { opacity: 0.35; cursor: default; pointer-events: none; }
+
+.cal-cell__num {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.num-sun { color: #e6273e; }
+.num-sat { color: #3587dc; }
+
+.cal-cell__dots {
+  display: flex;
+  gap: 2px;
+}
+.slot-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: block;
+  transition: background 0.15s;
+}
+
+/* ── Progress section ────────────────────────────────────────── */
+.progress-section {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e8e8e8;
+  padding: 14px 16px;
+}
+.progress-section__labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.progress-section__stats {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.stat-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.stat-preferred  { background: #EBF3FC; color: #3587dc; }
+.stat-available  { background: #e8f5e9; color: #2e7d32; }
+.stat-unavailable{ background: #f5f5f5; color: #757575; }
+
+/* ── Submit area ─────────────────────────────────────────────── */
+.submit-area { padding-bottom: 4px; }
+
+/* ── Bottom sheet ────────────────────────────────────────────── */
+.sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: #e0e0e0;
+  border-radius: 2px;
+  margin: 10px auto 0;
+}
+.sheet-content {
+  padding: 12px 20px 24px;
+}
+.sheet-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 16px;
+}
+
+.slot-row {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.slot-row:last-of-type { border-bottom: none; margin-bottom: 0; }
+
+.slot-row__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.slot-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1.5px solid;
+}
+.slot-time {
+  font-size: 13px;
+  color: #424242;
+  font-weight: 500;
+}
+
+.slot-choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.choice-btn {
+  flex: 1;
+  min-width: 80px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1.5px solid;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.choice-btn--clear {
+  flex: none;
+  min-width: 0;
+  width: 36px;
+  padding: 8px;
+  border-color: #e0e0e0 !important;
+  color: #9e9e9e !important;
+  background: transparent !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 </style>
