@@ -45,6 +45,29 @@
         </v-card-text>
       </v-card>
 
+      <!-- Help store selector: only when HELP variant -->
+      <template v-if="clockStore.punchVariant === 'HELP'">
+        <div class="text-subtitle-2 font-weight-bold text-grey-darken-2 mb-2">応援先店舗</div>
+        <v-card rounded="xl" elevation="0" variant="outlined" class="mb-4" style="border-color: #f59e0b;">
+          <v-card-text class="pa-3">
+            <div class="d-flex gap-2 flex-wrap">
+              <v-chip
+                v-for="store in helpStores"
+                :key="store"
+                :color="clockStore.helpStore === store ? 'warning' : undefined"
+                :variant="clockStore.helpStore === store ? 'tonal' : 'outlined'"
+                @click="clockStore.helpStore = store"
+              >
+                {{ store }}
+              </v-chip>
+            </div>
+            <div v-if="!clockStore.helpStore" class="text-caption text-error mt-2">
+              応援先店舗を選択してください
+            </div>
+          </v-card-text>
+        </v-card>
+      </template>
+
       <div class="text-subtitle-2 font-weight-bold text-grey-darken-2 mb-2">部署</div>
       <v-card rounded="xl" elevation="0" variant="outlined" class="mb-4">
         <v-card-text class="pa-3">
@@ -75,8 +98,18 @@
             <div v-if="clockStore.checkInTime" class="text-body-2 text-grey">
               出勤: {{ clockStore.checkInTime }}
             </div>
-            <div v-if="clockStore.punchVariant !== 'NORMAL' && clockStore.status !== 'NOT_STARTED'" class="text-caption text-grey">
-              {{ clockStore.variantLabel }}打刻 · {{ clockStore.department }}
+            <div v-if="clockStore.status !== 'NOT_STARTED'" class="text-caption text-grey">
+              <template v-if="clockStore.punchVariant === 'HELP'">
+                <v-chip size="x-small" color="warning" variant="tonal" class="mr-1">ヘルプ</v-chip>
+                <span>{{ clockStore.helpStore ? clockStore.helpStore + ' · ' : '' }}{{ clockStore.department }}</span>
+              </template>
+              <template v-else-if="clockStore.punchVariant === 'TRAINING'">
+                <v-chip size="x-small" color="teal" variant="tonal" class="mr-1">研修</v-chip>
+                <span>{{ clockStore.department }}</span>
+              </template>
+              <template v-else>
+                <span>{{ clockStore.department }}</span>
+              </template>
             </div>
           </div>
         </div>
@@ -168,8 +201,16 @@
         <div class="text-subtitle-1 font-weight-bold mb-1">{{ confirmTitle }}</div>
         <div class="text-h5 font-weight-bold text-primary mb-1">{{ timeNow.timeShort.value }}</div>
         <div class="text-body-2 text-grey mb-1">{{ timeNow.dateLabel.value }}</div>
-        <div v-if="pendingAction === 'CHECK_IN' && clockStore.punchVariant !== 'NORMAL'" class="text-caption text-grey mb-1">
-          {{ clockStore.variantLabel }}打刻 / {{ clockStore.department }}
+        <div v-if="pendingAction === 'CHECK_IN'" class="text-caption text-grey mb-1">
+          <template v-if="clockStore.punchVariant === 'HELP'">
+            ヘルプ打刻 / {{ clockStore.helpStore || '店舗未選択' }} {{ clockStore.department }}
+          </template>
+          <template v-else-if="clockStore.punchVariant === 'TRAINING'">
+            研修打刻 / {{ clockStore.department }}
+          </template>
+          <template v-else>
+            {{ clockStore.department }}
+          </template>
         </div>
         <div v-if="clockStore.status === 'WORKING' && pendingAction === 'CHECK_OUT'" class="text-caption text-grey mb-1">
           勤務時間: {{ clockStore.elapsedDisplay }}
@@ -196,6 +237,7 @@ const appStore = useAppStore()
 const timeNow = useTimeNow()
 
 const departments: Department[] = ['ホール', 'キッチン', 'レジ']
+const helpStores: string[] = ['新宿店', '池袋店', '六本木店', '表参道店']
 
 const variantLabelMap: Record<string, string> = { NORMAL: '通常', HELP: 'ヘルプ', TRAINING: '研修' }
 

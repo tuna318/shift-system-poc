@@ -16,6 +16,21 @@ export type PunchType = 'CHECK_IN' | 'BREAK_START' | 'BREAK_END' | 'CHECK_OUT'
 export type ClockStatus = 'NOT_STARTED' | 'WORKING' | 'ON_BREAK' | 'COMPLETED'
 export type PunchVariant = 'NORMAL' | 'HELP' | 'TRAINING'
 
+export interface BreakSession {
+  start: string
+  end: string | null
+}
+
+/** One continuous work block within a day (for split-shift days) */
+export interface WorkSession {
+  checkIn: string
+  checkOut: string | null
+  breaks?: BreakSession[]
+  department?: Department      // which dept the employee worked in for this session
+  punchVariant?: PunchVariant  // NORMAL | HELP | TRAINING
+  helpStore?: string           // populated when punchVariant === 'HELP' (cross-store)
+}
+
 export interface PunchEvent {
   type: PunchType
   time: string
@@ -50,6 +65,14 @@ export interface AttendanceRecord {
   overtimeMinutes: number
   scheduledStart: string | null
   scheduledEnd: string | null
+  breaks?: BreakSession[]
+  sessions?: WorkSession[]     // populated when employee has multiple shifts in a day
+  department?: Department
+  punchVariant?: PunchVariant
+  helpStore?: string             // populated when punchVariant === 'HELP' (cross-store)
+  punchMethod?: string           // 'app' | future types (iPad, IC card…)
+  originalCheckIn?: string | null   // punch value before correction
+  originalCheckOut?: string | null
   note?: string
   correctionComment?: string
 }

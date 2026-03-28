@@ -7,9 +7,22 @@
         <div class="greeting-sub">{{ greeting }}</div>
         <div class="greeting-name">{{ employeeName }} さん</div>
       </div>
-      <div class="greeting-date">
-        <div class="greeting-date__day">{{ dateDay }}</div>
-        <div class="greeting-date__label">{{ dateMonthLabel }}</div>
+      <div class="greeting-right">
+        <div class="greeting-date">
+          <div class="greeting-date__day">{{ dateDay }}</div>
+          <div class="greeting-date__label">{{ dateMonthLabel }}</div>
+        </div>
+        <v-btn icon variant="text" size="small" @click="navigateTo('/notifications')">
+          <v-badge
+            v-if="appStore.unreadCount > 0"
+            :content="appStore.unreadCount"
+            color="error"
+            floating
+          >
+            <v-icon size="22">mdi-bell-outline</v-icon>
+          </v-badge>
+          <v-icon v-else size="22">mdi-bell-outline</v-icon>
+        </v-btn>
       </div>
     </div>
 
@@ -230,6 +243,7 @@ function doPunch(type: string) {
 }
 .greeting-sub  { font-size: 12px; color: #9e9e9e; }
 .greeting-name { font-size: 17px; font-weight: 700; color: #1a1a1a; margin-top: 2px; }
+.greeting-right { display: flex; align-items: center; gap: 4px; }
 .greeting-date { text-align: right; }
 .greeting-date__day   { font-size: 28px; font-weight: 700; color: #1a1a1a; line-height: 1; }
 .greeting-date__label { font-size: 11px; color: #9e9e9e; margin-top: 2px; }

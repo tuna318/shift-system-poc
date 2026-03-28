@@ -10,6 +10,7 @@ export const useClockStore = defineStore('clock', () => {
   const todayDate = ref('')
   const department = ref<Department>('ホール')
   const punchVariant = ref<PunchVariant>('NORMAL')
+  const helpStore = ref<string>('')   // store name when punchVariant === 'HELP'
   const lastPunchAt = ref<Date | null>(null)
 
   // Reset if day has changed
@@ -94,6 +95,7 @@ export const useClockStore = defineStore('clock', () => {
     events,
     department,
     punchVariant,
+    helpStore,
     elapsedWorkMinutes,
     elapsedDisplay,
     variantLabel,

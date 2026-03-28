@@ -51,6 +51,11 @@ export const useMockData = () => {
     { id: 's-013', employeeId: 'emp-003', date: '2026-03-30', startTime: '13:00', endTime: '19:00', department: 'ホール', status: 'CONFIRMED', cellStatus: 'CONFIRMED' },
     // Today (using real date for demo; keeping 2026-03-22 for other references)
     { id: 's-014', employeeId: 'emp-003', date: '2026-03-22', startTime: '09:00', endTime: '15:00', department: 'ホール', status: 'CONFIRMED', cellStatus: 'CONFIRMED' },
+    // Split-shift day — 3/19: morning (朝番) + evening (夕番)
+    { id: 's-015a', employeeId: 'emp-003', date: '2026-03-19', startTime: '09:00', endTime: '14:00', department: 'ホール', status: 'CONFIRMED', cellStatus: 'CONFIRMED' },
+    { id: 's-015b', employeeId: 'emp-003', date: '2026-03-19', startTime: '17:00', endTime: '21:00', department: 'ホール', status: 'CONFIRMED', cellStatus: 'CONFIRMED' },
+    // 未退勤 demo day
+    { id: 's-016', employeeId: 'emp-003', date: '2026-03-27', startTime: '10:00', endTime: '16:00', department: 'ホール', status: 'CONFIRMED', cellStatus: 'CONFIRMED' },
   ]
 
   // ── Shift preferences submitted for April 2026 ─────────────────────────────
@@ -139,17 +144,71 @@ export const useMockData = () => {
 
   // ── Attendance records for February + March 2026 ────────────────────────────
   const myAttendance: AttendanceRecord[] = [
-    { id: 'att-001', employeeId: 'emp-003', date: '2026-02-02', status: 'APPROVED', checkIn: '10:03', checkOut: '15:12', breakMinutes: 0, totalMinutes: 309, overtimeMinutes: 0, scheduledStart: '10:00', scheduledEnd: '15:00' },
-    { id: 'att-002', employeeId: 'emp-003', date: '2026-02-05', status: 'APPROVED', checkIn: '11:02', checkOut: '17:05', breakMinutes: 60, totalMinutes: 303, overtimeMinutes: 0, scheduledStart: '11:00', scheduledEnd: '17:00' },
-    { id: 'att-003', employeeId: 'emp-003', date: '2026-02-09', status: 'APPROVED', checkIn: '09:05', checkOut: '14:58', breakMinutes: 0, totalMinutes: 293, overtimeMinutes: 0, scheduledStart: '09:00', scheduledEnd: '15:00' },
-    { id: 'att-004', employeeId: 'emp-003', date: '2026-02-12', status: 'APPROVED', checkIn: '13:01', checkOut: '18:30', breakMinutes: 0, totalMinutes: 329, overtimeMinutes: 30, scheduledStart: '13:00', scheduledEnd: '18:00' },
-    { id: 'att-005', employeeId: 'emp-003', date: '2026-02-16', status: 'APPROVED', checkIn: '10:00', checkOut: '16:02', breakMinutes: 60, totalMinutes: 302, overtimeMinutes: 0, scheduledStart: '10:00', scheduledEnd: '16:00' },
-    { id: 'att-006', employeeId: 'emp-003', date: '2026-02-19', status: 'APPROVED', checkIn: '11:00', checkOut: '17:10', breakMinutes: 60, totalMinutes: 310, overtimeMinutes: 10, scheduledStart: '11:00', scheduledEnd: '17:00' },
-    { id: 'att-007', employeeId: 'emp-003', date: '2026-03-02', status: 'APPROVED', checkIn: '10:02', checkOut: '15:05', breakMinutes: 0, totalMinutes: 303, overtimeMinutes: 0, scheduledStart: '10:00', scheduledEnd: '15:00' },
-    { id: 'att-008', employeeId: 'emp-003', date: '2026-03-04', status: 'APPROVED', checkIn: '11:00', checkOut: '17:15', breakMinutes: 60, totalMinutes: 315, overtimeMinutes: 15, scheduledStart: '11:00', scheduledEnd: '17:00' },
-    { id: 'att-009', employeeId: 'emp-003', date: '2026-03-06', status: 'APPROVED', checkIn: '09:00', checkOut: '14:00', breakMinutes: 0, totalMinutes: 300, overtimeMinutes: 0, scheduledStart: '09:00', scheduledEnd: '14:00' },
-    { id: 'att-010', employeeId: 'emp-003', date: '2026-03-08', status: 'CORRECTION_REQUESTED', checkIn: '13:05', checkOut: null, breakMinutes: 0, totalMinutes: 0, overtimeMinutes: 0, scheduledStart: '13:00', scheduledEnd: '18:00', correctionComment: '退勤打刻が記録されていません。正確な退勤時刻を入力してください。' },
+    { id: 'att-001', employeeId: 'emp-003', date: '2026-02-02', status: 'APPROVED', checkIn: '10:03', checkOut: '15:12', breakMinutes: 0, breaks: [], totalMinutes: 309, overtimeMinutes: 0, scheduledStart: '10:00', scheduledEnd: '15:00', department: 'ホール' },
+    { id: 'att-002', employeeId: 'emp-003', date: '2026-02-05', status: 'APPROVED', checkIn: '11:02', checkOut: '17:05', breakMinutes: 60, breaks: [{ start: '13:30', end: '14:30' }], totalMinutes: 303, overtimeMinutes: 0, scheduledStart: '11:00', scheduledEnd: '17:00', department: 'ホール' },
+    { id: 'att-003', employeeId: 'emp-003', date: '2026-02-09', status: 'APPROVED', checkIn: '09:05', checkOut: '14:58', breakMinutes: 0, breaks: [], totalMinutes: 293, overtimeMinutes: 0, scheduledStart: '09:00', scheduledEnd: '15:00', department: 'ホール' },
+    { id: 'att-004', employeeId: 'emp-003', date: '2026-02-12', status: 'APPROVED', checkIn: '13:01', checkOut: '18:30', breakMinutes: 0, breaks: [], totalMinutes: 329, overtimeMinutes: 30, scheduledStart: '13:00', scheduledEnd: '18:00', department: 'ホール' },
+    { id: 'att-005', employeeId: 'emp-003', date: '2026-02-16', status: 'APPROVED', checkIn: '10:00', checkOut: '16:02', breakMinutes: 60, breaks: [{ start: '12:30', end: '13:30' }], totalMinutes: 302, overtimeMinutes: 0, scheduledStart: '10:00', scheduledEnd: '16:00', department: 'ホール' },
+    { id: 'att-006', employeeId: 'emp-003', date: '2026-02-19', status: 'APPROVED', checkIn: '11:00', checkOut: '17:10', breakMinutes: 60, breaks: [{ start: '13:00', end: '14:00' }], totalMinutes: 310, overtimeMinutes: 10, scheduledStart: '11:00', scheduledEnd: '17:00', department: 'ホール' },
+    { id: 'att-007', employeeId: 'emp-003', date: '2026-03-02', status: 'APPROVED', checkIn: '10:02', checkOut: '15:05', breakMinutes: 0, breaks: [], totalMinutes: 303, overtimeMinutes: 0, scheduledStart: '10:00', scheduledEnd: '15:00', department: 'ホール' },
+    { id: 'att-008', employeeId: 'emp-003', date: '2026-03-04', status: 'APPROVED', checkIn: '11:00', checkOut: '17:15', breakMinutes: 60, breaks: [{ start: '13:00', end: '14:00' }], totalMinutes: 315, overtimeMinutes: 15, scheduledStart: '11:00', scheduledEnd: '17:00', department: 'ホール', punchMethod: 'app', originalCheckIn: '11:03', originalCheckOut: '17:08' },
+    { id: 'att-009', employeeId: 'emp-003', date: '2026-03-06', status: 'APPROVED', checkIn: '09:00', checkOut: '14:00', breakMinutes: 0, breaks: [], totalMinutes: 300, overtimeMinutes: 0, scheduledStart: '09:00', scheduledEnd: '14:00', department: 'ホール' },
+    { id: 'att-010', employeeId: 'emp-003', date: '2026-03-08', status: 'CORRECTION_REQUESTED', checkIn: '13:05', checkOut: null, breakMinutes: 0, breaks: [], totalMinutes: 0, overtimeMinutes: 0, scheduledStart: '13:00', scheduledEnd: '18:00', correctionComment: '退勤打刻が記録されていません。正確な退勤時刻を入力してください。', department: 'ホール' },
+    // Night shift: 22:00 → 02:30 next day (3/11) — 270 min work, 270 min deep night
+    { id: 'att-011', employeeId: 'emp-003', date: '2026-03-10', status: 'APPROVED', checkIn: '22:00', checkOut: '02:30', breakMinutes: 0, breaks: [], totalMinutes: 270, overtimeMinutes: 30, scheduledStart: '22:00', scheduledEnd: '02:00', department: 'ホール', punchMethod: 'app' },
+    { id: 'att-012', employeeId: 'emp-003', date: '2026-03-12', status: 'APPROVED', checkIn: '10:00', checkOut: '16:30', breakMinutes: 60, breaks: [{ start: '12:00', end: '12:30' }, { start: '14:30', end: '15:00' }], totalMinutes: 330, overtimeMinutes: 30, scheduledStart: '10:00', scheduledEnd: '16:00', department: 'キッチン', punchVariant: 'HELP', helpStore: '池袋店' },
+    { id: 'att-013', employeeId: 'emp-003', date: '2026-03-14', status: 'APPROVED', checkIn: '11:00', checkOut: '17:20', breakMinutes: 60, breaks: [{ start: '13:00', end: '14:00' }], totalMinutes: 320, overtimeMinutes: 20, scheduledStart: '11:00', scheduledEnd: '17:00', department: 'ホール' },
+    { id: 'att-014', employeeId: 'emp-003', date: '2026-03-16', status: 'APPROVED', checkIn: '09:02', checkOut: '17:45', breakMinutes: 60, breaks: [{ start: '12:00', end: '13:00' }], totalMinutes: 463, overtimeMinutes: 103, scheduledStart: '09:00', scheduledEnd: '15:00', department: 'ホール' },
+    { id: 'att-015', employeeId: 'emp-003', date: '2026-03-23', status: 'APPROVED', checkIn: '09:00', checkOut: '19:00', breakMinutes: 60, breaks: [{ start: '12:30', end: '13:30' }], totalMinutes: 540, overtimeMinutes: 240, scheduledStart: '09:00', scheduledEnd: '15:00', department: 'ホール' },
+    { id: 'att-016', employeeId: 'emp-003', date: '2026-03-24', status: 'PENDING_APPROVAL', checkIn: '10:00', checkOut: '19:30', breakMinutes: 60, breaks: [{ start: '12:30', end: '13:30' }], totalMinutes: 510, overtimeMinutes: 270, scheduledStart: '10:00', scheduledEnd: '15:00', department: 'ホール' },
+    { id: 'att-017', employeeId: 'emp-003', date: '2026-03-25', status: 'APPROVED', checkIn: '11:00', checkOut: '20:30', breakMinutes: 60, breaks: [{ start: '13:30', end: '14:30' }], totalMinutes: 510, overtimeMinutes: 210, scheduledStart: '11:00', scheduledEnd: '17:00', department: 'ホール' },
+    { id: 'att-018', employeeId: 'emp-003', date: '2026-03-26', status: 'PENDING_APPROVAL', checkIn: '11:05', checkOut: '19:00', breakMinutes: 60, breaks: [{ start: '13:00', end: '14:00' }], totalMinutes: 415, overtimeMinutes: 15, scheduledStart: '11:00', scheduledEnd: '17:00', department: 'ホール' },
+    // Split-shift day: morning (09:05–14:10, 30 min break) + evening (17:02–21:15, no break)
+    {
+      id: 'att-019', employeeId: 'emp-003', date: '2026-03-19', status: 'APPROVED',
+      checkIn: '09:05', checkOut: '21:15',
+      breakMinutes: 30, totalMinutes: 498, overtimeMinutes: 0,
+      scheduledStart: '09:00', scheduledEnd: '21:00', department: 'ホール',
+      breaks: [{ start: '12:00', end: '12:30' }],
+      sessions: [
+        { checkIn: '09:05', checkOut: '14:10', breaks: [{ start: '12:00', end: '12:30' }], department: 'ホール', punchVariant: 'NORMAL' },
+        { checkIn: '17:02', checkOut: '21:15', breaks: [], department: 'キッチン', punchVariant: 'HELP', helpStore: '新宿店' },
+      ],
+    },
+    // 未退勤: checked in but forgot to clock out (3/27, has shift)
+    { id: 'att-020', employeeId: 'emp-003', date: '2026-03-27', status: 'NOT_SUBMITTED', checkIn: '10:00', checkOut: null, breakMinutes: 0, breaks: [], totalMinutes: 0, overtimeMinutes: 0, scheduledStart: '10:00', scheduledEnd: '16:00', department: 'ホール' },
+
+    // ── NOT_SUBMITTED — complete data, 申請 active ──────────────────────────
+    // 3/17 (Tue) — research/training day at a different dept, no scheduled shift
+    { id: 'att-021', employeeId: 'emp-003', date: '2026-03-17', status: 'NOT_SUBMITTED', checkIn: '10:00', checkOut: '16:00', breakMinutes: 60, breaks: [{ start: '13:00', end: '14:00' }], totalMinutes: 300, overtimeMinutes: 0, scheduledStart: null, scheduledEnd: null, department: 'キッチン', punchVariant: 'TRAINING' },
+    // 3/18 (Wed) — regular shift, clock-in slightly late, clocked out on time
+    { id: 'att-022', employeeId: 'emp-003', date: '2026-03-18', status: 'NOT_SUBMITTED', checkIn: '11:08', checkOut: '17:05', breakMinutes: 60, breaks: [{ start: '13:00', end: '14:00' }], totalMinutes: 297, overtimeMinutes: 0, scheduledStart: '11:00', scheduledEnd: '17:00', department: 'ホール' },
+    // 3/20 (Fri) — ヘルプ勤務 at a nearby store, short shift
+    { id: 'att-023', employeeId: 'emp-003', date: '2026-03-20', status: 'NOT_SUBMITTED', checkIn: '17:00', checkOut: '22:00', breakMinutes: 30, breaks: [{ start: '19:30', end: '20:00' }], totalMinutes: 270, overtimeMinutes: 0, scheduledStart: '17:00', scheduledEnd: '22:00', department: 'ホール', punchVariant: 'HELP', helpStore: '六本木店' },
+    // 3/21 (Sat) — weekend volunteer shift, overtime all holiday
+    { id: 'att-024', employeeId: 'emp-003', date: '2026-03-21', status: 'NOT_SUBMITTED', checkIn: '10:00', checkOut: '15:30', breakMinutes: 0, breaks: [], totalMinutes: 330, overtimeMinutes: 0, scheduledStart: null, scheduledEnd: null, department: 'ホール' },
+
+    // ── CORRECTION_REQUESTED — manager asked to fix, employee corrected data, 申請 active ──
+    // 3/22 (Sun, has shift) — original punch was missing; employee has now entered the times
+    { id: 'att-025', employeeId: 'emp-003', date: '2026-03-22', status: 'CORRECTION_REQUESTED', checkIn: '09:05', checkOut: '14:58', breakMinutes: 0, breaks: [], totalMinutes: 353, overtimeMinutes: 0, scheduledStart: '09:00', scheduledEnd: '15:00', correctionComment: '出勤打刻が見つかりません。正確な時刻を入力して再申請してください。', department: 'ホール' },
   ]
+
+  // ── Historical monthly data ─────────────────────────────────────────────────
+  const historicalMonthly: Record<string, { workDays: number; totalMinutes: number; overtimeMinutes: number }> = {
+    '2025-01': { workDays: 11, totalMinutes: 3300, overtimeMinutes: 30 },
+    '2025-02': { workDays: 10, totalMinutes: 3000, overtimeMinutes: 0 },
+    '2025-03': { workDays: 13, totalMinutes: 3900, overtimeMinutes: 60 },
+    '2025-04': { workDays: 12, totalMinutes: 3600, overtimeMinutes: 30 },
+    '2025-05': { workDays: 13, totalMinutes: 3900, overtimeMinutes: 75 },
+    '2025-06': { workDays: 11, totalMinutes: 3300, overtimeMinutes: 15 },
+    '2025-07': { workDays: 14, totalMinutes: 4200, overtimeMinutes: 150 },
+    '2025-08': { workDays: 15, totalMinutes: 4500, overtimeMinutes: 195 },
+    '2025-09': { workDays: 12, totalMinutes: 3600, overtimeMinutes: 45 },
+    '2025-10': { workDays: 13, totalMinutes: 3900, overtimeMinutes: 60 },
+    '2025-11': { workDays: 12, totalMinutes: 3600, overtimeMinutes: 30 },
+    '2025-12': { workDays: 11, totalMinutes: 3300, overtimeMinutes: 60 },
+    '2026-01': { workDays: 14, totalMinutes: 4200, overtimeMinutes: 90 },
+  }
 
   // ── Current punch status (today) ────────────────────────────────────────────
   const currentPunchStatus = ref<PunchStatus>({
@@ -276,7 +335,7 @@ export const useMockData = () => {
       body: '3/8の退勤時刻が記録されていません。確認してください',
       date: '2026-03-09',
       read: false,
-      relatedId: 'att-010',
+      relatedId: '2026-03-08',
     },
     {
       id: 'n4',
@@ -314,6 +373,11 @@ export const useMockData = () => {
         const bAdj = b.cellStatus === 'ADJUSTING' ? 1 : 0
         return aAdj - bAdj
       })[0] ?? null
+  }
+
+  /** Returns all shifts for a date (split-shift days have 2+) */
+  function getShiftsForDate(date: string) {
+    return myShifts.filter(s => s.date === date).sort((a, b) => a.startTime.localeCompare(b.startTime))
   }
 
   function getShiftById(id: string) {
@@ -354,6 +418,65 @@ export const useMockData = () => {
       .reduce((sum, a) => sum + a.totalMinutes, 0)
   }
 
+  function getMondayStr(dateStr: string): string {
+    const d = new Date(dateStr)
+    const day = d.getDay()
+    const diff = day === 0 ? -6 : 1 - day
+    d.setDate(d.getDate() + diff)
+    return d.toISOString().slice(0, 10)
+  }
+
+  function getMonthOvertimeMinutes(year: number, month: number): number {
+    return myAttendance
+      .filter((a) => {
+        const d = new Date(a.date)
+        return d.getFullYear() === year && d.getMonth() + 1 === month
+      })
+      .reduce((sum, a) => sum + (a.overtimeMinutes ?? 0), 0)
+  }
+
+  function getWeekTotalMinutes(mondayStr: string): number {
+    const sunday = new Date(mondayStr)
+    sunday.setDate(sunday.getDate() + 6)
+    const sundayStr = sunday.toISOString().slice(0, 10)
+    return myAttendance
+      .filter((a) => a.date >= mondayStr && a.date <= sundayStr && (a.totalMinutes ?? 0) > 0)
+      .reduce((sum, a) => sum + (a.totalMinutes ?? 0), 0)
+  }
+
+  function getMonthlySummary(year: number, month: number): { workDays: number; totalMinutes: number; overtimeMinutes: number } {
+    const key = `${year}-${String(month).padStart(2, '0')}`
+    const fromRecords = myAttendance.filter((a) => {
+      const d = new Date(a.date)
+      return d.getFullYear() === year && d.getMonth() + 1 === month
+    })
+    if (fromRecords.length > 0) {
+      return {
+        workDays: fromRecords.filter((a) => a.checkIn).length,
+        totalMinutes: fromRecords.reduce((sum, a) => sum + (a.totalMinutes ?? 0), 0),
+        overtimeMinutes: fromRecords.reduce((sum, a) => sum + (a.overtimeMinutes ?? 0), 0),
+      }
+    }
+    return historicalMonthly[key] ?? { workDays: 0, totalMinutes: 0, overtimeMinutes: 0 }
+  }
+
+  function getYearlySummary(year: number) {
+    const today = new Date()
+    return Array.from({ length: 12 }, (_, i) => {
+      const month = i + 1
+      const isFuture = year > today.getFullYear() || (year === today.getFullYear() && month > today.getMonth() + 1)
+      const summary = isFuture ? { workDays: 0, totalMinutes: 0, overtimeMinutes: 0 } : getMonthlySummary(year, month)
+      return {
+        year,
+        month,
+        monthLabel: `${month}月`,
+        isCurrentMonth: year === today.getFullYear() && month === today.getMonth() + 1,
+        isFuture,
+        ...summary,
+      }
+    })
+  }
+
   return {
     employees,
     loggedInEmployee,
@@ -368,6 +491,7 @@ export const useMockData = () => {
     chatMessages,
     notifications,
     getShiftForDate,
+    getShiftsForDate,
     getShiftById,
     getAttendanceForDate,
     getPreferenceForDate,
@@ -375,5 +499,10 @@ export const useMockData = () => {
     getEmployeeById,
     formatMinutes,
     getMonthTotalMinutes,
+    getMondayStr,
+    getMonthOvertimeMinutes,
+    getWeekTotalMinutes,
+    getMonthlySummary,
+    getYearlySummary,
   }
 }
