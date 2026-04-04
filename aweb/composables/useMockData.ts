@@ -244,7 +244,7 @@ const marAllocation  = makeAllocationSetup('mar26',  2026, 3)
 const aprAllocation  = makeAllocationSetup('apr26',  2026, 4)
 
 const febEntries = makeMonthEntries('feb26', 2026, 2, 'past')
-const marEntries = makeMonthEntries('mar26', 2026, 3, 'current')
+const marEntries = makeMonthEntries('mar26', 2026, 3, 'past')
 const aprEntries = makeMonthEntries('apr26', 2026, 4, 'future')
 
 // ============================================================
