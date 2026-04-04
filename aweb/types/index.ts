@@ -66,6 +66,8 @@ export interface ShiftBoard {
 }
 
 export interface WorkSession {
+  id?: string
+  sessionIdx?: number
   checkIn?: string
   checkOut?: string
   breakMinutes: number
@@ -73,6 +75,8 @@ export interface WorkSession {
   department?: string
   punchVariant?: 'NORMAL' | 'HELP' | 'TRAINING'
   helpStore?: string
+  nightMinutes?: number
+  shiftEntryId?: string
 }
 
 export interface AttendanceRecord {
@@ -88,6 +92,29 @@ export interface AttendanceRecord {
   punchEvents: PunchEvent[]
   sessions?: WorkSession[]
   correctionComment?: string
+  submittedAt?: string
+  approvedAt?: string
+  approvedBy?: string
+  shiftEntryId?: string
+}
+
+export type AttendanceApprovalStatus =
+  | 'NO_RECORD'
+  | 'NOT_SUBMITTED'
+  | 'PENDING_APPROVAL'
+  | 'CORRECTION_REQUESTED'
+  | 'APPROVED'
+
+export interface DayAttendanceSummary {
+  employeeId: string
+  workDate: string
+  status: AttendanceApprovalStatus
+  totalMinutes: number
+  sessionCount: number
+  pendingCorrectionCount: number
+  complianceFlags: ComplianceFlag[]
+  shiftEntry?: Pick<ShiftEntry, 'id' | 'startTime' | 'endTime' | 'department'>
+  recordId?: string
 }
 
 export interface PunchEvent {

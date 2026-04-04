@@ -336,12 +336,7 @@ const preferencesByBoard: Record<string, Map<string, ShiftPreference>> = {
 }
 
 // ============================================================
-// ATTENDANCE RECORDS (Last 7 days ending 2026-03-15)
-// Uses approval-workflow statuses matching employee mobile app:
-//   NOT_SUBMITTED  → work done, employee hasn't submitted yet
-//   PENDING_APPROVAL → employee submitted, manager needs to act
-//   CORRECTION_REQUESTED → manager sent back for correction
-//   APPROVED → manager approved
+// ATTENDANCE RECORDS — covers March 1 → April 4 2026 (today = 2026-04-04)
 // ============================================================
 const CORRECTION_COMMENTS = [
   '退勤打刻が確認できません。正確な退勤時刻を入力して再申請してください。',
@@ -353,11 +348,27 @@ function makeAttendanceRecords(): AttendanceRecord[] {
   const records: AttendanceRecord[] = []
   let recId = 1
   let punchId = 1
+  let sessId = 1
 
   const hm = (h: number, m = 0) =>
     `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 
-  // Push a standard single-session record
+  const mins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+
+  function nightMins(ci: string, co: string): number {
+    let s = mins(ci); let e = mins(co)
+    if (e <= s) e += 1440
+    let n = 0
+    if (e > 1320) n += Math.min(e, 1440) - Math.max(s, 1320)
+    if (e > 1440) n += Math.min(e, 1740) - Math.max(s, 1440)
+    return Math.max(0, n)
+  }
+
+  function approvedAt(workDate: string): string | undefined {
+    return `${workDate}T10:00:00`
+  }
+
+  // Single-session record
   function pushRec(
     empId: string,
     workDate: string,
@@ -365,14 +376,16 @@ function makeAttendanceRecords(): AttendanceRecord[] {
     checkOut: string,
     breakMins: number,
     status: AttendanceStatus,
-    correctionComment?: string,
+    opts: { dept?: string; variant?: 'NORMAL' | 'HELP' | 'TRAINING'; correctionComment?: string; submittedAt?: string } = {},
   ) {
-    const [ciH, ciM] = checkIn.split(':').map(Number)
-    const [coH, coM] = checkOut.split(':').map(Number)
-    const actualMins = (coH * 60 + coM) - (ciH * 60 + ciM) - breakMins
-    const bH = ciH + 3
+    const actualMins = mins(checkOut) - mins(checkIn) - breakMins
+    const bH = Number(checkIn.split(':')[0]) + 3
+    const sid = `sess-${String(sessId++).padStart(3, '0')}`
+    const recIdStr = `att-${String(recId++).padStart(3, '0')}`
+    const dept = opts.dept ?? (employees.find(e => e.id === empId)?.department ?? 'キッチン')
+    const variant = opts.variant ?? 'NORMAL'
     records.push({
-      id: `att-${String(recId++).padStart(3, '0')}`,
+      id: recIdStr,
       employeeId: empId,
       workDate,
       status,
@@ -381,27 +394,46 @@ function makeAttendanceRecords(): AttendanceRecord[] {
       breakMinutes: breakMins,
       actualMinutes: actualMins,
       overtimeMinutes: Math.max(0, actualMins - 480),
+      submittedAt: status === 'PENDING_APPROVAL' || status === 'APPROVED' || status === 'CORRECTION_REQUESTED'
+        ? opts.submittedAt ?? `${workDate}T${checkOut}:00`
+        : undefined,
+      approvedAt: status === 'APPROVED' ? approvedAt(workDate) : undefined,
       punchEvents: [
-        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${checkIn}:00`,    isVoided: false },
-        { id: `p${punchId++}`, punchType: 'BREAK_START', punchedAt: `${workDate}T${hm(bH)}:00`,     isVoided: false },
-        { id: `p${punchId++}`, punchType: 'BREAK_END',   punchedAt: `${workDate}T${hm(bH, 45)}:00`, isVoided: false },
-        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${checkOut}:00`,   isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${checkIn}:00`,       isVoided: false },
+        { id: `p${punchId++}`, punchType: 'BREAK_START', punchedAt: `${workDate}T${hm(bH)}:00`,        isVoided: false },
+        { id: `p${punchId++}`, punchType: 'BREAK_END',   punchedAt: `${workDate}T${hm(bH, 45)}:00`,    isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${checkOut}:00`,      isVoided: false },
       ],
-      correctionComment,
+      sessions: [{
+        id: sid,
+        sessionIdx: 0,
+        checkIn,
+        checkOut,
+        breakMinutes: breakMins,
+        actualMinutes: actualMins,
+        department: dept,
+        punchVariant: variant,
+        nightMinutes: nightMins(checkIn, checkOut),
+      }],
+      correctionComment: opts.correctionComment,
     })
   }
 
-  // Push a split-session record (e.g. ランチ + 夕番)
+  // Split-session record (2 sessions in one day)
   function pushSplitRec(
     empId: string,
     workDate: string,
-    s1: { ci: string; co: string; dept: string },
-    s2: { ci: string; co: string; dept: string },
+    s1: { ci: string; co: string; dept: string; variant?: 'NORMAL' | 'HELP' | 'TRAINING' },
+    s2: { ci: string; co: string; dept: string; variant?: 'NORMAL' | 'HELP' | 'TRAINING' },
     status: AttendanceStatus,
   ) {
-    const mins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
     const act1 = mins(s1.co) - mins(s1.ci)
     const act2 = mins(s2.co) - mins(s2.ci) - 30
+    const total = act1 + act2
+    const sid1 = `sess-${String(sessId++).padStart(3, '0')}`
+    const sid2 = `sess-${String(sessId++).padStart(3, '0')}`
+    // break is in session 2 around midpoint
+    const bHour = Number(s2.ci.split(':')[0]) + Math.floor((mins(s2.co) - mins(s2.ci)) / 120)
     records.push({
       id: `att-${String(recId++).padStart(3, '0')}`,
       employeeId: empId,
@@ -410,127 +442,264 @@ function makeAttendanceRecords(): AttendanceRecord[] {
       checkIn: s1.ci,
       checkOut: s2.co,
       breakMinutes: 30,
-      actualMinutes: act1 + act2,
-      overtimeMinutes: Math.max(0, act1 + act2 - 480),
+      actualMinutes: total,
+      overtimeMinutes: Math.max(0, total - 480),
+      submittedAt: status === 'PENDING_APPROVAL' || status === 'APPROVED' || status === 'CORRECTION_REQUESTED'
+        ? `${workDate}T${s2.co}:00`
+        : undefined,
+      approvedAt: status === 'APPROVED' ? approvedAt(workDate) : undefined,
       punchEvents: [
-        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${s1.ci}:00`, isVoided: false },
-        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${s1.co}:00`, isVoided: false },
-        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${s2.ci}:00`, isVoided: false },
-        { id: `p${punchId++}`, punchType: 'BREAK_START', punchedAt: `${workDate}T19:30:00`,     isVoided: false },
-        { id: `p${punchId++}`, punchType: 'BREAK_END',   punchedAt: `${workDate}T20:00:00`,     isVoided: false },
-        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${s2.co}:00`, isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${s1.ci}:00`,      isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${s1.co}:00`,      isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${s2.ci}:00`,      isVoided: false },
+        { id: `p${punchId++}`, punchType: 'BREAK_START', punchedAt: `${workDate}T${hm(bHour)}:00`,  isVoided: false },
+        { id: `p${punchId++}`, punchType: 'BREAK_END',   punchedAt: `${workDate}T${hm(bHour, 30)}:00`, isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${s2.co}:00`,      isVoided: false },
       ],
       sessions: [
-        { checkIn: s1.ci, checkOut: s1.co, breakMinutes: 0,  actualMinutes: act1, department: s1.dept },
-        { checkIn: s2.ci, checkOut: s2.co, breakMinutes: 30, actualMinutes: act2, department: s2.dept },
+        { id: sid1, sessionIdx: 0, checkIn: s1.ci, checkOut: s1.co, breakMinutes: 0,  actualMinutes: act1, department: s1.dept, punchVariant: s1.variant ?? 'NORMAL', nightMinutes: nightMins(s1.ci, s1.co) },
+        { id: sid2, sessionIdx: 1, checkIn: s2.ci, checkOut: s2.co, breakMinutes: 30, actualMinutes: act2, department: s2.dept, punchVariant: s2.variant ?? 'NORMAL', nightMinutes: nightMins(s2.ci, s2.co) },
       ],
     })
   }
 
-  // ── March 1–8: APPROVED ──────────────────────────────────────
-  // 山田太郎 (キッチン朝番 07:00–15:00)
+  // ── March 1–15: APPROVED / PENDING / CORRECTION_REQUESTED ────
   pushRec('emp-001', '2026-03-02', '07:05', '15:10', 45, 'APPROVED')
   pushRec('emp-001', '2026-03-03', '06:58', '15:05', 45, 'APPROVED')
   pushRec('emp-001', '2026-03-04', '07:00', '15:30', 45, 'APPROVED')
   pushRec('emp-001', '2026-03-05', '07:00', '15:00', 45, 'APPROVED')
-  pushRec('emp-001', '2026-03-06', '07:00', '16:45', 45, 'APPROVED') // overtime
+  pushRec('emp-001', '2026-03-06', '07:00', '16:45', 45, 'APPROVED')
 
-  // 佐藤花子 (ホールリーダー、スプリットシフト多め)
-  pushSplitRec('emp-006', '2026-03-04',
-    { ci: '10:00', co: '14:30', dept: 'ホール' },
-    { ci: '17:00', co: '21:30', dept: 'ホール' },
-    'APPROVED')
-  pushSplitRec('emp-006', '2026-03-06',
-    { ci: '10:00', co: '14:30', dept: 'ホール' },
-    { ci: '17:00', co: '22:00', dept: 'ホール' },
-    'APPROVED')
-  pushRec('emp-006', '2026-03-07', '15:00', '22:00', 45, 'APPROVED')
+  pushSplitRec('emp-006', '2026-03-04', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '21:30', dept: 'ホール' }, 'APPROVED')
+  pushSplitRec('emp-006', '2026-03-06', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '22:00', dept: 'ホール' }, 'APPROVED')
+  pushRec('emp-006', '2026-03-07', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
 
-  // 鈴木一郎
-  pushRec('emp-002', '2026-03-02', '09:15', '17:00', 45, 'APPROVED') // 15min late
-  pushRec('emp-002', '2026-03-04', '09:00', '16:45', 45, 'APPROVED')
-  pushRec('emp-002', '2026-03-06', '09:00', '15:30', 45, 'APPROVED')
+  pushRec('emp-002', '2026-03-02', '09:15', '17:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-002', '2026-03-04', '09:00', '16:45', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-002', '2026-03-06', '09:00', '15:30', 45, 'APPROVED', { dept: 'キッチン' })
 
-  // 渡辺健司 (残業傾向)
-  pushRec('emp-004', '2026-03-02', '09:00', '18:30', 60, 'APPROVED')
-  pushRec('emp-004', '2026-03-03', '09:00', '18:00', 60, 'APPROVED')
-  pushRec('emp-004', '2026-03-05', '09:00', '18:45', 60, 'APPROVED')
+  pushRec('emp-004', '2026-03-02', '09:00', '18:30', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-03', '09:00', '18:00', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-05', '09:00', '18:45', 60, 'APPROVED', { dept: 'キッチン' })
 
-  // 高橋和也 (夕番)
-  pushRec('emp-007', '2026-03-03', '15:00', '21:30', 45, 'APPROVED')
-  pushRec('emp-007', '2026-03-05', '15:00', '22:00', 45, 'APPROVED')
+  pushRec('emp-007', '2026-03-03', '15:00', '21:30', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-007', '2026-03-05', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
 
-  // 小林正樹 (土曜ダブル)
-  pushSplitRec('emp-009', '2026-03-07',
-    { ci: '10:00', co: '15:00', dept: 'ホール' },
-    { ci: '16:00', co: '21:30', dept: 'ホール' },
-    'APPROVED')
+  pushSplitRec('emp-009', '2026-03-07', { ci: '10:00', co: '15:00', dept: 'ホール' }, { ci: '16:00', co: '21:30', dept: 'ホール' }, 'APPROVED')
 
-  // 中村さくら
-  pushRec('emp-008', '2026-03-01', '10:00', '16:30', 45, 'APPROVED')
-  pushRec('emp-008', '2026-03-03', '10:00', '14:30', 0,  'APPROVED') // short shift
-  pushRec('emp-008', '2026-03-05', '10:00', '16:00', 45, 'APPROVED')
+  pushRec('emp-008', '2026-03-01', '10:00', '16:30', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-008', '2026-03-03', '10:00', '14:30', 0,  'APPROVED', { dept: 'ホール' })
+  pushRec('emp-008', '2026-03-05', '10:00', '16:00', 45, 'APPROVED', { dept: 'ホール' })
 
-  // 田中恵子
-  pushRec('emp-003', '2026-03-02', '10:00', '16:00', 45, 'APPROVED')
-  pushRec('emp-003', '2026-03-04', '10:00', '16:30', 45, 'APPROVED')
+  pushRec('emp-003', '2026-03-02', '10:00', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-003', '2026-03-04', '10:00', '16:30', 45, 'APPROVED', { dept: 'キッチン' })
 
-  // ── March 9–13: PENDING_APPROVAL / CORRECTION_REQUESTED ──────
-  pushRec('emp-001', '2026-03-09', '07:00', '15:10', 45, 'PENDING_APPROVAL')
-  pushRec('emp-001', '2026-03-10', '07:00', '15:00', 45, 'PENDING_APPROVAL')
-  pushRec('emp-001', '2026-03-11', '07:20', '15:00', 45, 'CORRECTION_REQUESTED', CORRECTION_COMMENTS[0])
-  pushRec('emp-001', '2026-03-12', '07:00', '16:30', 45, 'PENDING_APPROVAL')
-  pushRec('emp-001', '2026-03-13', '07:00', '15:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-012', '2026-03-02', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-03', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-04', '09:00', '17:30', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-05', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-06', '09:00', '18:00', 60, 'APPROVED', { dept: 'レジ' })
 
-  pushSplitRec('emp-006', '2026-03-09',
-    { ci: '10:00', co: '14:30', dept: 'ホール' },
-    { ci: '17:00', co: '21:15', dept: 'ホール' },
-    'PENDING_APPROVAL')
-  pushRec('emp-006', '2026-03-10', '10:00', '15:00', 30, 'PENDING_APPROVAL')
-  pushSplitRec('emp-006', '2026-03-12',
-    { ci: '10:00', co: '14:30', dept: 'ホール' },
-    { ci: '17:00', co: '21:15', dept: 'キッチン' }, // ヘルプ
-    'PENDING_APPROVAL')
-  pushRec('emp-006', '2026-03-13', '15:00', '22:00', 45, 'CORRECTION_REQUESTED', CORRECTION_COMMENTS[1])
+  // March 9–15
+  pushRec('emp-001', '2026-03-09', '07:00', '15:10', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-10', '07:00', '15:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-11', '07:20', '15:00', 45, 'CORRECTION_REQUESTED', { correctionComment: CORRECTION_COMMENTS[0] })
+  pushRec('emp-001', '2026-03-12', '07:00', '16:30', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-13', '07:00', '15:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-14', '07:00', '15:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-15', '07:02', '15:00', 45, 'APPROVED')
 
-  pushRec('emp-002', '2026-03-09', '09:15', '17:00', 45, 'PENDING_APPROVAL') // late
-  pushRec('emp-002', '2026-03-11', '09:00', '17:00', 45, 'PENDING_APPROVAL')
-  pushRec('emp-002', '2026-03-13', '09:00', '16:45', 45, 'PENDING_APPROVAL')
+  pushSplitRec('emp-006', '2026-03-09', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '21:15', dept: 'ホール' }, 'APPROVED')
+  pushRec('emp-006', '2026-03-10', '10:00', '15:00', 30, 'APPROVED', { dept: 'ホール' })
+  pushSplitRec('emp-006', '2026-03-12', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '21:15', dept: 'キッチン', variant: 'HELP' }, 'APPROVED')
+  pushRec('emp-006', '2026-03-13', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-006', '2026-03-14', '10:00', '15:00', 30, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-006', '2026-03-15', '10:00', '14:30', 30, 'APPROVED', { dept: 'ホール' })
 
-  pushRec('emp-004', '2026-03-09', '09:00', '18:30', 60, 'PENDING_APPROVAL')
-  pushRec('emp-004', '2026-03-10', '09:00', '18:00', 60, 'CORRECTION_REQUESTED', CORRECTION_COMMENTS[1])
-  pushRec('emp-004', '2026-03-12', '09:00', '18:45', 60, 'PENDING_APPROVAL')
+  pushRec('emp-002', '2026-03-09', '09:15', '17:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-002', '2026-03-11', '09:00', '17:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-002', '2026-03-13', '09:00', '16:45', 45, 'APPROVED', { dept: 'キッチン' })
 
-  pushRec('emp-007', '2026-03-10', '15:00', '21:30', 45, 'PENDING_APPROVAL')
-  pushRec('emp-007', '2026-03-12', '15:00', '22:15', 45, 'PENDING_APPROVAL')
+  pushRec('emp-004', '2026-03-09', '09:00', '18:30', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-10', '09:00', '18:00', 60, 'CORRECTION_REQUESTED', { dept: 'キッチン', correctionComment: CORRECTION_COMMENTS[1] })
+  pushRec('emp-004', '2026-03-12', '09:00', '18:45', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-14', '09:00', '18:00', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-15', '09:00', '17:30', 60, 'APPROVED', { dept: 'キッチン' })
 
-  pushSplitRec('emp-009', '2026-03-14',
-    { ci: '10:00', co: '15:00', dept: 'ホール' },
-    { ci: '15:00', co: '22:00', dept: 'ホール' },
-    'PENDING_APPROVAL')
+  pushRec('emp-007', '2026-03-10', '15:00', '21:30', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-007', '2026-03-12', '15:00', '22:15', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-007', '2026-03-14', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-007', '2026-03-15', '15:10', '22:00', 45, 'APPROVED', { dept: 'ホール' })
 
-  pushRec('emp-008', '2026-03-09', '10:00', '16:00', 45, 'PENDING_APPROVAL')
-  pushRec('emp-008', '2026-03-11', '10:00', '16:30', 45, 'PENDING_APPROVAL')
-  pushRec('emp-008', '2026-03-13', '10:00', '14:30', 0,  'PENDING_APPROVAL')
+  pushSplitRec('emp-009', '2026-03-14', { ci: '10:00', co: '15:00', dept: 'ホール' }, { ci: '15:00', co: '22:00', dept: 'ホール' }, 'APPROVED')
 
-  pushRec('emp-003', '2026-03-09', '10:00', '16:00', 45, 'PENDING_APPROVAL')
-  pushRec('emp-003', '2026-03-11', '10:30', '16:00', 45, 'PENDING_APPROVAL') // 30min late
-  pushRec('emp-003', '2026-03-13', '10:00', '16:30', 45, 'PENDING_APPROVAL')
+  pushRec('emp-008', '2026-03-09', '10:00', '16:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-008', '2026-03-11', '10:00', '16:30', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-008', '2026-03-13', '10:00', '14:30', 0,  'APPROVED', { dept: 'ホール' })
 
-  pushRec('emp-005', '2026-03-10', '11:00', '17:00', 45, 'PENDING_APPROVAL')
-  pushRec('emp-005', '2026-03-12', '11:00', '16:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-003', '2026-03-09', '10:00', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-003', '2026-03-11', '10:30', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-003', '2026-03-13', '10:00', '16:30', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-003', '2026-03-14', '10:00', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
 
-  // ── March 14: PENDING_APPROVAL ────────────────────────────────
-  pushRec('emp-001', '2026-03-14', '07:00', '15:00', 45, 'PENDING_APPROVAL')
-  pushRec('emp-004', '2026-03-14', '09:00', '18:00', 60, 'PENDING_APPROVAL')
-  pushRec('emp-007', '2026-03-14', '15:00', '22:00', 45, 'PENDING_APPROVAL')
-  pushRec('emp-003', '2026-03-14', '10:00', '16:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-005', '2026-03-10', '11:00', '17:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-005', '2026-03-12', '11:00', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
 
-  // ── March 15 (today): NOT_SUBMITTED ──────────────────────────
-  pushRec('emp-001', '2026-03-15', '07:02', '15:00', 45, 'NOT_SUBMITTED')
-  pushRec('emp-004', '2026-03-15', '09:00', '17:30', 60, 'NOT_SUBMITTED')
-  pushRec('emp-006', '2026-03-15', '10:00', '14:30', 30, 'NOT_SUBMITTED')
-  pushRec('emp-007', '2026-03-15', '15:10', '22:00', 45, 'NOT_SUBMITTED')
+  pushRec('emp-012', '2026-03-09', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-10', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-11', '09:00', '17:30', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-12', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-13', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+
+  // ── March 16–22 ── APPROVED ──────────────────────────────────
+  pushRec('emp-001', '2026-03-16', '07:00', '15:15', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-17', '07:05', '15:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-18', '07:00', '15:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-19', '07:00', '16:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-20', '07:00', '15:30', 45, 'APPROVED')
+
+  pushRec('emp-004', '2026-03-16', '09:00', '18:30', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-17', '09:00', '18:00', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-18', '09:00', '18:15', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-19', '09:00', '18:45', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-20', '09:00', '18:00', 60, 'APPROVED', { dept: 'キッチン' })
+
+  pushSplitRec('emp-006', '2026-03-16', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '21:30', dept: 'ホール' }, 'APPROVED')
+  pushRec('emp-006', '2026-03-17', '10:00', '16:00', 30, 'APPROVED', { dept: 'ホール' })
+  pushSplitRec('emp-006', '2026-03-18', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '22:00', dept: 'ホール' }, 'APPROVED')
+  pushRec('emp-006', '2026-03-19', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushSplitRec('emp-006', '2026-03-21', { ci: '10:00', co: '14:00', dept: 'ホール' }, { ci: '16:00', co: '21:30', dept: 'ホール' }, 'APPROVED')
+  pushSplitRec('emp-006', '2026-03-22', { ci: '10:00', co: '14:00', dept: 'ホール' }, { ci: '16:00', co: '22:00', dept: 'ホール' }, 'APPROVED')
+
+  pushRec('emp-002', '2026-03-16', '09:00', '16:45', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-002', '2026-03-18', '09:00', '17:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-002', '2026-03-20', '09:00', '16:30', 45, 'APPROVED', { dept: 'キッチン' })
+
+  pushRec('emp-007', '2026-03-17', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-007', '2026-03-19', '15:00', '21:45', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-007', '2026-03-20', '15:00', '22:15', 45, 'APPROVED', { dept: 'ホール' })
+
+  pushRec('emp-003', '2026-03-16', '10:00', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-003', '2026-03-18', '10:00', '16:30', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-003', '2026-03-20', '10:00', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
+
+  pushRec('emp-008', '2026-03-16', '10:00', '16:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-008', '2026-03-18', '10:00', '15:30', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-008', '2026-03-21', '10:00', '16:00', 45, 'APPROVED', { dept: 'ホール' })
+
+  pushRec('emp-012', '2026-03-16', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-17', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-18', '09:00', '17:30', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-19', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-20', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+
+  pushRec('emp-009', '2026-03-21', '10:00', '21:30', 60, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-009', '2026-03-22', '10:00', '22:00', 60, 'APPROVED', { dept: 'ホール' })
+
+  // ── March 23–29 ── APPROVED ──────────────────────────────────
+  pushRec('emp-001', '2026-03-23', '07:00', '15:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-24', '07:00', '15:20', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-25', '07:00', '16:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-26', '07:05', '15:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-27', '07:00', '15:00', 45, 'APPROVED')
+
+  pushRec('emp-004', '2026-03-23', '09:00', '18:30', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-24', '09:00', '19:00', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-25', '09:00', '18:00', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-26', '09:00', '18:30', 60, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-27', '09:00', '18:00', 60, 'APPROVED', { dept: 'キッチン' })
+
+  pushSplitRec('emp-006', '2026-03-23', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '21:30', dept: 'ホール' }, 'APPROVED')
+  pushRec('emp-006', '2026-03-24', '10:00', '16:00', 30, 'APPROVED', { dept: 'ホール' })
+  pushSplitRec('emp-006', '2026-03-25', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '22:00', dept: 'ホール' }, 'APPROVED')
+  pushRec('emp-006', '2026-03-26', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushSplitRec('emp-006', '2026-03-28', { ci: '10:00', co: '14:00', dept: 'ホール' }, { ci: '16:00', co: '21:30', dept: 'ホール' }, 'APPROVED')
+  pushSplitRec('emp-006', '2026-03-29', { ci: '10:00', co: '14:00', dept: 'ホール' }, { ci: '16:00', co: '22:00', dept: 'ホール' }, 'APPROVED')
+
+  pushRec('emp-002', '2026-03-23', '09:00', '17:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-002', '2026-03-25', '09:00', '16:45', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-002', '2026-03-27', '09:00', '16:30', 45, 'APPROVED', { dept: 'キッチン' })
+
+  pushRec('emp-007', '2026-03-24', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-007', '2026-03-26', '15:00', '22:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-007', '2026-03-27', '15:00', '21:30', 45, 'APPROVED', { dept: 'ホール' })
+
+  pushRec('emp-003', '2026-03-23', '10:00', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-003', '2026-03-25', '10:00', '16:30', 45, 'APPROVED', { dept: 'キッチン' })
+  pushRec('emp-003', '2026-03-27', '10:00', '16:00', 45, 'APPROVED', { dept: 'キッチン' })
+
+  pushRec('emp-008', '2026-03-23', '10:00', '16:00', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-008', '2026-03-25', '10:00', '15:30', 45, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-008', '2026-03-28', '10:00', '16:30', 45, 'APPROVED', { dept: 'ホール' })
+
+  pushRec('emp-012', '2026-03-23', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-24', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-25', '09:00', '17:30', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-26', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-27', '09:00', '17:00', 60, 'APPROVED', { dept: 'レジ' })
+
+  pushRec('emp-009', '2026-03-28', '10:00', '21:30', 60, 'APPROVED', { dept: 'ホール' })
+  pushRec('emp-009', '2026-03-29', '10:00', '22:00', 60, 'APPROVED', { dept: 'ホール' })
+
+  // ── March 30–31 ── PENDING_APPROVAL ──────────────────────────
+  pushRec('emp-001', '2026-03-30', '07:00', '15:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-001', '2026-03-31', '07:05', '15:30', 45, 'PENDING_APPROVAL')
+
+  pushRec('emp-004', '2026-03-30', '09:00', '18:30', 60, 'PENDING_APPROVAL', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-03-31', '09:00', '19:00', 60, 'PENDING_APPROVAL', { dept: 'キッチン' })
+
+  pushSplitRec('emp-006', '2026-03-30', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '21:30', dept: 'ホール' }, 'PENDING_APPROVAL')
+  pushSplitRec('emp-006', '2026-03-31', { ci: '10:00', co: '14:00', dept: 'ホール' }, { ci: '16:00', co: '21:00', dept: 'ホール' }, 'PENDING_APPROVAL')
+
+  pushRec('emp-002', '2026-03-30', '09:00', '17:00', 45, 'PENDING_APPROVAL', { dept: 'キッチン' })
+
+  pushRec('emp-007', '2026-03-31', '15:00', '22:00', 45, 'PENDING_APPROVAL', { dept: 'ホール' })
+
+  pushRec('emp-003', '2026-03-30', '10:00', '16:00', 45, 'PENDING_APPROVAL', { dept: 'キッチン' })
+
+  pushRec('emp-008', '2026-03-30', '10:00', '16:00', 45, 'PENDING_APPROVAL', { dept: 'ホール' })
+
+  pushRec('emp-012', '2026-03-30', '09:00', '17:00', 60, 'PENDING_APPROVAL', { dept: 'レジ' })
+  pushRec('emp-012', '2026-03-31', '09:00', '17:00', 60, 'PENDING_APPROVAL', { dept: 'レジ' })
+
+  // ── April 1–2 ── PENDING_APPROVAL ────────────────────────────
+  pushRec('emp-001', '2026-04-01', '07:00', '15:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-001', '2026-04-02', '07:00', '15:20', 45, 'PENDING_APPROVAL')
+
+  pushRec('emp-004', '2026-04-01', '09:00', '18:15', 60, 'PENDING_APPROVAL', { dept: 'キッチン' })
+  pushRec('emp-004', '2026-04-02', '09:00', '18:30', 60, 'PENDING_APPROVAL', { dept: 'キッチン' })
+
+  pushSplitRec('emp-006', '2026-04-01', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '21:30', dept: 'ホール' }, 'PENDING_APPROVAL')
+  pushSplitRec('emp-006', '2026-04-02', { ci: '10:00', co: '14:00', dept: 'ホール' }, { ci: '17:00', co: '22:00', dept: 'ホール' }, 'PENDING_APPROVAL')
+
+  pushRec('emp-002', '2026-04-01', '09:00', '17:00', 45, 'PENDING_APPROVAL', { dept: 'キッチン' })
+  // emp-002 April 2: has correction request cr-008 (forgot clock-out)
+  pushRec('emp-002', '2026-04-02', '09:05', '18:00', 45, 'PENDING_APPROVAL', { dept: 'キッチン' })
+
+  pushRec('emp-007', '2026-04-01', '15:00', '22:00', 45, 'PENDING_APPROVAL', { dept: 'ホール' })
+
+  pushRec('emp-003', '2026-04-01', '10:00', '16:30', 45, 'PENDING_APPROVAL', { dept: 'キッチン' })
+
+  pushRec('emp-008', '2026-04-02', '10:00', '16:00', 45, 'PENDING_APPROVAL', { dept: 'ホール' })
+
+  pushRec('emp-012', '2026-04-01', '09:00', '17:00', 60, 'PENDING_APPROVAL', { dept: 'レジ' })
+  pushRec('emp-012', '2026-04-02', '09:00', '17:30', 60, 'PENDING_APPROVAL', { dept: 'レジ' })
+
+  // ── April 3 ── PENDING_APPROVAL / NOT_SUBMITTED ───────────────
+  pushRec('emp-001', '2026-04-03', '07:00', '15:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-004', '2026-04-03', '09:00', '18:00', 60, 'PENDING_APPROVAL', { dept: 'キッチン' })
+  pushSplitRec('emp-006', '2026-04-03', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '21:30', dept: 'ホール' }, 'PENDING_APPROVAL')
+  // emp-007 April 3: has correction request cr-007
+  pushRec('emp-007', '2026-04-03', '15:00', '22:00', 45, 'PENDING_APPROVAL', { dept: 'ホール' })
+  pushRec('emp-002', '2026-04-03', '09:00', '16:45', 45, 'NOT_SUBMITTED', { dept: 'キッチン' })
+  pushRec('emp-012', '2026-04-03', '09:00', '17:00', 60, 'NOT_SUBMITTED', { dept: 'レジ' })
+  pushRec('emp-003', '2026-04-03', '10:00', '16:00', 45, 'NOT_SUBMITTED', { dept: 'キッチン' })
+
+  // ── April 4 (today) ── NOT_SUBMITTED / still working ─────────
+  pushRec('emp-001', '2026-04-04', '07:02', '15:00', 45, 'NOT_SUBMITTED')
+  pushRec('emp-004', '2026-04-04', '09:00', '18:00', 60, 'NOT_SUBMITTED', { dept: 'キッチン' })
+  pushSplitRec('emp-006', '2026-04-04', { ci: '10:00', co: '14:30', dept: 'ホール' }, { ci: '17:00', co: '22:00', dept: 'ホール' }, 'NOT_SUBMITTED')
+  pushRec('emp-012', '2026-04-04', '09:05', '17:00', 60, 'NOT_SUBMITTED', { dept: 'レジ' })
 
   return records
 }
@@ -873,6 +1042,58 @@ const correctionRequests: CorrectionRequest[] = [
     managerNote: '準備時間はシフト前には含まれません。不明点はリーダーに確認してください。',
     createdAt: '2026-03-03T20:00:00',
   },
+  // pending — edit: 高橋和也 forgot to clock out on 4/3
+  {
+    id: 'cr-007',
+    type: 'edit',
+    employeeId: 'emp-007',
+    workDate: '2026-04-03',
+    originalCheckIn: '15:00',
+    originalCheckOut: undefined,
+    requestedCheckIn: '15:00',
+    requestedCheckOut: '22:00',
+    reason: '退勤時に打刻を忘れてしまいました。22:00に退勤しています。',
+    status: 'pending',
+    createdAt: '2026-04-03T23:00:00',
+  },
+  // pending — edit: 鈴木一郎 clock-in time shifted by system on 4/2
+  {
+    id: 'cr-008',
+    type: 'edit',
+    employeeId: 'emp-002',
+    workDate: '2026-04-02',
+    originalCheckIn: '09:05',
+    originalCheckOut: '18:00',
+    requestedCheckIn: '09:00',
+    requestedCheckOut: '18:00',
+    reason: '出勤時に打刻機の反応が遅く、5分ずれて記録されました。シフト開始は09:00です。',
+    status: 'pending',
+    createdAt: '2026-04-02T18:30:00',
+  },
+  // pending — add_missing: 加藤真由 entire shift on 3/29 not recorded
+  {
+    id: 'cr-009',
+    type: 'add_missing',
+    employeeId: 'emp-010',
+    workDate: '2026-03-29',
+    requestedCheckIn: '10:00',
+    requestedCheckOut: '16:00',
+    reason: 'スマートフォンの不具合でアプリが起動せず、勤務全体が未記録になりました。',
+    status: 'pending',
+    createdAt: '2026-03-29T16:30:00',
+  },
+  // pending — add_missing: 木村大輔 training session on 4/3 not recorded
+  {
+    id: 'cr-010',
+    type: 'add_missing',
+    employeeId: 'emp-013',
+    workDate: '2026-04-03',
+    requestedCheckIn: '14:00',
+    requestedCheckOut: '18:00',
+    reason: 'レジ研修のため別フロアで勤務しており、打刻機を利用できませんでした。',
+    status: 'pending',
+    createdAt: '2026-04-03T19:00:00',
+  },
 ]
 
 // ── Shared attendance utilities ────────────────────────────────────────────
@@ -908,6 +1129,10 @@ export function getComplianceFlags(record: AttendanceRecord): ComplianceFlag[] {
 
 function getRecordsForDate(date: string): AttendanceRecord[] {
   return attendanceRecords.filter(r => r.workDate === date)
+}
+
+function getRecordForEmployee(empId: string, date: string): AttendanceRecord | undefined {
+  return attendanceRecords.find(r => r.employeeId === empId && r.workDate === date)
 }
 
 function getCorrectionRequestsForEmployee(empId: string): CorrectionRequest[] {
@@ -970,6 +1195,7 @@ export function useMockData() {
     getCorrectionRequestsForDate,
     getPendingCorrectionRequests,
     getRecordsForDate,
+    getRecordForEmployee,
     computeNightMins,
     getComplianceFlags,
     getEmpShiftsForDate,
