@@ -1,9 +1,10 @@
 import type {
-  Employee, ShiftBoard, ShiftEntry, AttendanceRecord, PunchEvent,
+  Employee, ShiftBoard, ShiftEntry, AttendanceRecord, AttendanceStatus, PunchEvent,
   CollectionRequest, CollectionSubmission, ComplianceAlert,
   ShiftPreference, ShiftPreferenceEntry, CellStatus, AdjustingResponseStatus,
   ShiftSlot, DaySlotAssignment, AllocationSetup,
   CrossShopRequest, ConfirmedEmployee,
+  CorrectionRequest, ComplianceFlag,
 } from '~/types'
 
 // ============================================================
@@ -335,72 +336,202 @@ const preferencesByBoard: Record<string, Map<string, ShiftPreference>> = {
 }
 
 // ============================================================
-// ATTENDANCE RECORDS (Last 7 days of current date 2026-03-15)
+// ATTENDANCE RECORDS (Last 7 days ending 2026-03-15)
+// Uses approval-workflow statuses matching employee mobile app:
+//   NOT_SUBMITTED  → work done, employee hasn't submitted yet
+//   PENDING_APPROVAL → employee submitted, manager needs to act
+//   CORRECTION_REQUESTED → manager sent back for correction
+//   APPROVED → manager approved
 // ============================================================
+const CORRECTION_COMMENTS = [
+  '退勤打刻が確認できません。正確な退勤時刻を入力して再申請してください。',
+  '勤務時間が予定シフトと大きくずれています。理由を添えて再申請してください。',
+  '深夜帯の勤務記録がありましたが、事前申請がありませんでした。確認・修正の上、再申請してください。',
+]
+
 function makeAttendanceRecords(): AttendanceRecord[] {
   const records: AttendanceRecord[] = []
-  const base = new Date('2026-03-15')
   let recId = 1
   let punchId = 1
 
-  for (let d = 6; d >= 0; d--) {
-    const date = new Date(base)
-    date.setDate(base.getDate() - d)
-    const workDate = date.toISOString().split('T')[0]
+  const hm = (h: number, m = 0) =>
+    `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 
-    const activeEmps = employees.filter(e => e.status === 'ACTIVE').slice(0, 12)
-    const dayEmps = activeEmps.filter((_, i) => (i + d) % 3 !== 0).slice(0, 10)
-
-    for (const emp of dayEmps) {
-      const checkInHour = 9 + (parseInt(emp.id.slice(-1)) % 4)
-      const checkInMin = (parseInt(emp.id.slice(-2)) % 3) * 15
-      const checkInTime = `${String(checkInHour).padStart(2, '0')}:${String(checkInMin).padStart(2, '0')}`
-      const workHours = 7 + (parseInt(emp.id.slice(-1)) % 3)
-      const checkOutTime = `${String(checkInHour + workHours).padStart(2, '0')}:${String(checkInMin).padStart(2, '0')}`
-      const breakMinutes = 45
-      const actualMinutes = workHours * 60 - breakMinutes
-      const overtimeMinutes = actualMinutes > 480 ? actualMinutes - 480 : 0
-
-      const isToday = d === 0
-      let status: 'NOT_STARTED' | 'WORKING' | 'ON_BREAK' | 'COMPLETED' | 'APPROVED'
-      if (isToday) {
-        const todayStatuses = ['WORKING', 'WORKING', 'WORKING', 'ON_BREAK', 'NOT_STARTED'] as const
-        status = todayStatuses[parseInt(emp.id.slice(-1)) % 5]
-      }
-      else if (d === 1) {
-        status = 'COMPLETED'
-      }
-      else {
-        status = parseInt(emp.id.slice(-1)) % 3 === 0 ? 'APPROVED' : 'COMPLETED'
-      }
-
-      const punchEvents: PunchEvent[] = []
-      if (status !== 'NOT_STARTED') {
-        punchEvents.push({ id: `punch-${punchId++}`, punchType: 'CHECK_IN', punchedAt: `${workDate}T${checkInTime}:00`, isVoided: false })
-        if (status === 'ON_BREAK' || status === 'COMPLETED' || status === 'APPROVED') {
-          const bh = checkInHour + 3
-          punchEvents.push({ id: `punch-${punchId++}`, punchType: 'BREAK_START', punchedAt: `${workDate}T${String(bh).padStart(2, '0')}:00:00`, isVoided: false })
-          if (status === 'COMPLETED' || status === 'APPROVED') {
-            punchEvents.push({ id: `punch-${punchId++}`, punchType: 'BREAK_END', punchedAt: `${workDate}T${String(bh).padStart(2, '0')}:45:00`, isVoided: false })
-            punchEvents.push({ id: `punch-${punchId++}`, punchType: 'CHECK_OUT', punchedAt: `${workDate}T${checkOutTime}:00`, isVoided: false })
-          }
-        }
-      }
-
-      records.push({
-        id: `att-${String(recId++).padStart(3, '0')}`,
-        employeeId: emp.id,
-        workDate,
-        status,
-        checkIn: status !== 'NOT_STARTED' ? checkInTime : undefined,
-        checkOut: (status === 'COMPLETED' || status === 'APPROVED') ? checkOutTime : undefined,
-        breakMinutes: status === 'NOT_STARTED' ? 0 : breakMinutes,
-        actualMinutes: status === 'NOT_STARTED' ? 0 : actualMinutes,
-        overtimeMinutes: status === 'NOT_STARTED' ? 0 : overtimeMinutes,
-        punchEvents,
-      })
-    }
+  // Push a standard single-session record
+  function pushRec(
+    empId: string,
+    workDate: string,
+    checkIn: string,
+    checkOut: string,
+    breakMins: number,
+    status: AttendanceStatus,
+    correctionComment?: string,
+  ) {
+    const [ciH, ciM] = checkIn.split(':').map(Number)
+    const [coH, coM] = checkOut.split(':').map(Number)
+    const actualMins = (coH * 60 + coM) - (ciH * 60 + ciM) - breakMins
+    const bH = ciH + 3
+    records.push({
+      id: `att-${String(recId++).padStart(3, '0')}`,
+      employeeId: empId,
+      workDate,
+      status,
+      checkIn,
+      checkOut,
+      breakMinutes: breakMins,
+      actualMinutes: actualMins,
+      overtimeMinutes: Math.max(0, actualMins - 480),
+      punchEvents: [
+        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${checkIn}:00`,    isVoided: false },
+        { id: `p${punchId++}`, punchType: 'BREAK_START', punchedAt: `${workDate}T${hm(bH)}:00`,     isVoided: false },
+        { id: `p${punchId++}`, punchType: 'BREAK_END',   punchedAt: `${workDate}T${hm(bH, 45)}:00`, isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${checkOut}:00`,   isVoided: false },
+      ],
+      correctionComment,
+    })
   }
+
+  // Push a split-session record (e.g. ランチ + 夕番)
+  function pushSplitRec(
+    empId: string,
+    workDate: string,
+    s1: { ci: string; co: string; dept: string },
+    s2: { ci: string; co: string; dept: string },
+    status: AttendanceStatus,
+  ) {
+    const mins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+    const act1 = mins(s1.co) - mins(s1.ci)
+    const act2 = mins(s2.co) - mins(s2.ci) - 30
+    records.push({
+      id: `att-${String(recId++).padStart(3, '0')}`,
+      employeeId: empId,
+      workDate,
+      status,
+      checkIn: s1.ci,
+      checkOut: s2.co,
+      breakMinutes: 30,
+      actualMinutes: act1 + act2,
+      overtimeMinutes: Math.max(0, act1 + act2 - 480),
+      punchEvents: [
+        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${s1.ci}:00`, isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${s1.co}:00`, isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_IN',    punchedAt: `${workDate}T${s2.ci}:00`, isVoided: false },
+        { id: `p${punchId++}`, punchType: 'BREAK_START', punchedAt: `${workDate}T19:30:00`,     isVoided: false },
+        { id: `p${punchId++}`, punchType: 'BREAK_END',   punchedAt: `${workDate}T20:00:00`,     isVoided: false },
+        { id: `p${punchId++}`, punchType: 'CHECK_OUT',   punchedAt: `${workDate}T${s2.co}:00`, isVoided: false },
+      ],
+      sessions: [
+        { checkIn: s1.ci, checkOut: s1.co, breakMinutes: 0,  actualMinutes: act1, department: s1.dept },
+        { checkIn: s2.ci, checkOut: s2.co, breakMinutes: 30, actualMinutes: act2, department: s2.dept },
+      ],
+    })
+  }
+
+  // ── March 1–8: APPROVED ──────────────────────────────────────
+  // 山田太郎 (キッチン朝番 07:00–15:00)
+  pushRec('emp-001', '2026-03-02', '07:05', '15:10', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-03', '06:58', '15:05', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-04', '07:00', '15:30', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-05', '07:00', '15:00', 45, 'APPROVED')
+  pushRec('emp-001', '2026-03-06', '07:00', '16:45', 45, 'APPROVED') // overtime
+
+  // 佐藤花子 (ホールリーダー、スプリットシフト多め)
+  pushSplitRec('emp-006', '2026-03-04',
+    { ci: '10:00', co: '14:30', dept: 'ホール' },
+    { ci: '17:00', co: '21:30', dept: 'ホール' },
+    'APPROVED')
+  pushSplitRec('emp-006', '2026-03-06',
+    { ci: '10:00', co: '14:30', dept: 'ホール' },
+    { ci: '17:00', co: '22:00', dept: 'ホール' },
+    'APPROVED')
+  pushRec('emp-006', '2026-03-07', '15:00', '22:00', 45, 'APPROVED')
+
+  // 鈴木一郎
+  pushRec('emp-002', '2026-03-02', '09:15', '17:00', 45, 'APPROVED') // 15min late
+  pushRec('emp-002', '2026-03-04', '09:00', '16:45', 45, 'APPROVED')
+  pushRec('emp-002', '2026-03-06', '09:00', '15:30', 45, 'APPROVED')
+
+  // 渡辺健司 (残業傾向)
+  pushRec('emp-004', '2026-03-02', '09:00', '18:30', 60, 'APPROVED')
+  pushRec('emp-004', '2026-03-03', '09:00', '18:00', 60, 'APPROVED')
+  pushRec('emp-004', '2026-03-05', '09:00', '18:45', 60, 'APPROVED')
+
+  // 高橋和也 (夕番)
+  pushRec('emp-007', '2026-03-03', '15:00', '21:30', 45, 'APPROVED')
+  pushRec('emp-007', '2026-03-05', '15:00', '22:00', 45, 'APPROVED')
+
+  // 小林正樹 (土曜ダブル)
+  pushSplitRec('emp-009', '2026-03-07',
+    { ci: '10:00', co: '15:00', dept: 'ホール' },
+    { ci: '16:00', co: '21:30', dept: 'ホール' },
+    'APPROVED')
+
+  // 中村さくら
+  pushRec('emp-008', '2026-03-01', '10:00', '16:30', 45, 'APPROVED')
+  pushRec('emp-008', '2026-03-03', '10:00', '14:30', 0,  'APPROVED') // short shift
+  pushRec('emp-008', '2026-03-05', '10:00', '16:00', 45, 'APPROVED')
+
+  // 田中恵子
+  pushRec('emp-003', '2026-03-02', '10:00', '16:00', 45, 'APPROVED')
+  pushRec('emp-003', '2026-03-04', '10:00', '16:30', 45, 'APPROVED')
+
+  // ── March 9–13: PENDING_APPROVAL / CORRECTION_REQUESTED ──────
+  pushRec('emp-001', '2026-03-09', '07:00', '15:10', 45, 'PENDING_APPROVAL')
+  pushRec('emp-001', '2026-03-10', '07:00', '15:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-001', '2026-03-11', '07:20', '15:00', 45, 'CORRECTION_REQUESTED', CORRECTION_COMMENTS[0])
+  pushRec('emp-001', '2026-03-12', '07:00', '16:30', 45, 'PENDING_APPROVAL')
+  pushRec('emp-001', '2026-03-13', '07:00', '15:00', 45, 'PENDING_APPROVAL')
+
+  pushSplitRec('emp-006', '2026-03-09',
+    { ci: '10:00', co: '14:30', dept: 'ホール' },
+    { ci: '17:00', co: '21:15', dept: 'ホール' },
+    'PENDING_APPROVAL')
+  pushRec('emp-006', '2026-03-10', '10:00', '15:00', 30, 'PENDING_APPROVAL')
+  pushSplitRec('emp-006', '2026-03-12',
+    { ci: '10:00', co: '14:30', dept: 'ホール' },
+    { ci: '17:00', co: '21:15', dept: 'キッチン' }, // ヘルプ
+    'PENDING_APPROVAL')
+  pushRec('emp-006', '2026-03-13', '15:00', '22:00', 45, 'CORRECTION_REQUESTED', CORRECTION_COMMENTS[1])
+
+  pushRec('emp-002', '2026-03-09', '09:15', '17:00', 45, 'PENDING_APPROVAL') // late
+  pushRec('emp-002', '2026-03-11', '09:00', '17:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-002', '2026-03-13', '09:00', '16:45', 45, 'PENDING_APPROVAL')
+
+  pushRec('emp-004', '2026-03-09', '09:00', '18:30', 60, 'PENDING_APPROVAL')
+  pushRec('emp-004', '2026-03-10', '09:00', '18:00', 60, 'CORRECTION_REQUESTED', CORRECTION_COMMENTS[1])
+  pushRec('emp-004', '2026-03-12', '09:00', '18:45', 60, 'PENDING_APPROVAL')
+
+  pushRec('emp-007', '2026-03-10', '15:00', '21:30', 45, 'PENDING_APPROVAL')
+  pushRec('emp-007', '2026-03-12', '15:00', '22:15', 45, 'PENDING_APPROVAL')
+
+  pushSplitRec('emp-009', '2026-03-14',
+    { ci: '10:00', co: '15:00', dept: 'ホール' },
+    { ci: '15:00', co: '22:00', dept: 'ホール' },
+    'PENDING_APPROVAL')
+
+  pushRec('emp-008', '2026-03-09', '10:00', '16:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-008', '2026-03-11', '10:00', '16:30', 45, 'PENDING_APPROVAL')
+  pushRec('emp-008', '2026-03-13', '10:00', '14:30', 0,  'PENDING_APPROVAL')
+
+  pushRec('emp-003', '2026-03-09', '10:00', '16:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-003', '2026-03-11', '10:30', '16:00', 45, 'PENDING_APPROVAL') // 30min late
+  pushRec('emp-003', '2026-03-13', '10:00', '16:30', 45, 'PENDING_APPROVAL')
+
+  pushRec('emp-005', '2026-03-10', '11:00', '17:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-005', '2026-03-12', '11:00', '16:00', 45, 'PENDING_APPROVAL')
+
+  // ── March 14: PENDING_APPROVAL ────────────────────────────────
+  pushRec('emp-001', '2026-03-14', '07:00', '15:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-004', '2026-03-14', '09:00', '18:00', 60, 'PENDING_APPROVAL')
+  pushRec('emp-007', '2026-03-14', '15:00', '22:00', 45, 'PENDING_APPROVAL')
+  pushRec('emp-003', '2026-03-14', '10:00', '16:00', 45, 'PENDING_APPROVAL')
+
+  // ── March 15 (today): NOT_SUBMITTED ──────────────────────────
+  pushRec('emp-001', '2026-03-15', '07:02', '15:00', 45, 'NOT_SUBMITTED')
+  pushRec('emp-004', '2026-03-15', '09:00', '17:30', 60, 'NOT_SUBMITTED')
+  pushRec('emp-006', '2026-03-15', '10:00', '14:30', 30, 'NOT_SUBMITTED')
+  pushRec('emp-007', '2026-03-15', '15:10', '22:00', 45, 'NOT_SUBMITTED')
+
   return records
 }
 
@@ -657,6 +788,151 @@ const crossShopRequests: CrossShopRequest[] = [
   },
 ]
 
+// ============================================================
+// CORRECTION REQUESTS
+// ============================================================
+const correctionRequests: CorrectionRequest[] = [
+  // pending — edit: forgot to clock out (emp-006 佐藤花子, 3/09)
+  {
+    id: 'cr-001',
+    type: 'edit',
+    employeeId: 'emp-006',
+    workDate: '2026-03-09',
+    originalCheckIn: '10:00',
+    originalCheckOut: undefined,
+    requestedCheckIn: '10:00',
+    requestedCheckOut: '18:00',
+    reason: '退勤打刻を忘れてしまいました。実際は18:00まで勤務していました。',
+    status: 'pending',
+    createdAt: '2026-03-09T19:00:00',
+  },
+  // pending — edit: slightly off times (emp-004 渡辺健司, 3/10)
+  {
+    id: 'cr-002',
+    type: 'edit',
+    employeeId: 'emp-004',
+    workDate: '2026-03-10',
+    originalCheckIn: '09:15',
+    originalCheckOut: '17:15',
+    requestedCheckIn: '09:00',
+    requestedCheckOut: '17:30',
+    reason: '打刻機の不具合で時刻がずれて記録されました',
+    status: 'pending',
+    createdAt: '2026-03-10T18:00:00',
+  },
+  // pending — add_missing: entire session not recorded (emp-012 松本幸子, 3/11)
+  {
+    id: 'cr-003',
+    type: 'add_missing',
+    employeeId: 'emp-012',
+    workDate: '2026-03-11',
+    requestedCheckIn: '10:00',
+    requestedCheckOut: '16:00',
+    reason: '早出対応があり、アプリを開かずに仕事を開始してしまいました',
+    status: 'pending',
+    createdAt: '2026-03-11T17:00:00',
+  },
+  // approved — edit (emp-002 鈴木一郎, 3/05)
+  {
+    id: 'cr-004',
+    type: 'edit',
+    employeeId: 'emp-002',
+    workDate: '2026-03-05',
+    originalCheckIn: '09:00',
+    originalCheckOut: '14:00',
+    requestedCheckIn: '09:00',
+    requestedCheckOut: '15:00',
+    reason: '業務延長があり退勤打刻が1時間遅れました',
+    status: 'approved',
+    createdAt: '2026-03-05T16:00:00',
+  },
+  // approved — add_missing (emp-008 中村さくら, 3/04)
+  {
+    id: 'cr-005',
+    type: 'add_missing',
+    employeeId: 'emp-008',
+    workDate: '2026-03-04',
+    requestedCheckIn: '11:00',
+    requestedCheckOut: '17:00',
+    reason: '入店時のICカード読み取りエラーで記録されませんでした',
+    status: 'approved',
+    createdAt: '2026-03-04T18:30:00',
+  },
+  // rejected — edit (emp-007 高橋和也, 3/03)
+  {
+    id: 'cr-006',
+    type: 'edit',
+    employeeId: 'emp-007',
+    workDate: '2026-03-03',
+    originalCheckIn: '13:00',
+    originalCheckOut: '19:00',
+    requestedCheckIn: '10:00',
+    requestedCheckOut: '19:00',
+    reason: '準備作業の時間を追加したい',
+    status: 'rejected',
+    managerNote: '準備時間はシフト前には含まれません。不明点はリーダーに確認してください。',
+    createdAt: '2026-03-03T20:00:00',
+  },
+]
+
+// ── Shared attendance utilities ────────────────────────────────────────────
+export function computeNightMins(checkIn?: string, checkOut?: string): number {
+  if (!checkIn || !checkOut) return 0
+  const [ih, im] = checkIn.split(':').map(Number)
+  const [oh, om] = checkOut.split(':').map(Number)
+  let startM = ih * 60 + im
+  let endM = oh * 60 + om
+  if (endM <= startM) endM += 1440
+  let night = 0
+  // band 1: 22:00–24:00
+  if (endM > 1320) night += Math.min(endM, 1440) - Math.max(startM, 1320)
+  // band 2: 00:00–05:00 (shifted to 1440–1740)
+  if (endM > 1440) night += Math.min(endM, 1740) - Math.max(startM, 1440)
+  return Math.max(0, night)
+}
+
+export function getComplianceFlags(record: AttendanceRecord): ComplianceFlag[] {
+  const flags: ComplianceFlag[] = []
+  if (record.actualMinutes >= 360 && record.breakMinutes === 0) {
+    flags.push({ key: 'no_break', level: 'error', icon: 'mdi-coffee-off-outline', message: `6時間以上休憩なし（労基法違反の可能性）` })
+  }
+  if (record.actualMinutes > 600) {
+    flags.push({ key: 'overwork', level: 'warning', icon: 'mdi-clock-alert-outline', message: `${Math.floor(record.actualMinutes / 60)}時間超過（過重労働注意）` })
+  }
+  const night = computeNightMins(record.checkIn, record.checkOut)
+  if (night > 0) {
+    flags.push({ key: 'night', level: 'info', icon: 'mdi-moon-waning-crescent', message: `深夜時間帯 ${night}分（割増対象）` })
+  }
+  return flags
+}
+
+function getRecordsForDate(date: string): AttendanceRecord[] {
+  return attendanceRecords.filter(r => r.workDate === date)
+}
+
+function getCorrectionRequestsForEmployee(empId: string): CorrectionRequest[] {
+  return correctionRequests.filter(r => r.employeeId === empId)
+}
+
+function getCorrectionRequestsForDate(empId: string, date: string): CorrectionRequest[] {
+  return correctionRequests.filter(r => r.employeeId === empId && r.workDate === date)
+}
+
+function getPendingCorrectionRequests(): CorrectionRequest[] {
+  return correctionRequests.filter(r => r.status === 'pending')
+}
+
+function getEmpShiftsForDate(empId: string, date: string): ShiftEntry[] {
+  for (const board of boards) {
+    const entries = board.entries.filter(
+      e => e.employeeId === empId && e.shiftDate === date
+        && e.cellStatus !== 'DAY_OFF_CONFIRMED' && e.cellStatus !== 'DAY_OFF_REQUESTED',
+    )
+    if (entries.length > 0) return entries
+  }
+  return []
+}
+
 function getOutgoingCrossShopRequests() {
   return crossShopRequests.filter(r => r.requestingShopId === 'shop-shibuya')
 }
@@ -689,5 +965,13 @@ export function useMockData() {
     crossShopRequests,
     getOutgoingCrossShopRequests,
     getIncomingCrossShopRequests,
+    correctionRequests,
+    getCorrectionRequestsForEmployee,
+    getCorrectionRequestsForDate,
+    getPendingCorrectionRequests,
+    getRecordsForDate,
+    computeNightMins,
+    getComplianceFlags,
+    getEmpShiftsForDate,
   }
 }

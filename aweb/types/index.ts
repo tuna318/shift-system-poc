@@ -1,6 +1,11 @@
 export type AdjustingResponseStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED'
 
-export type AttendanceStatus = 'NOT_STARTED' | 'WORKING' | 'ON_BREAK' | 'COMPLETED' | 'APPROVED'
+export type AttendanceStatus =
+  | 'NOT_STARTED' | 'WORKING' | 'ON_BREAK' | 'COMPLETED'  // legacy clock-in states
+  | 'NOT_SUBMITTED'         // work done but employee hasn't submitted for approval yet
+  | 'PENDING_APPROVAL'      // employee submitted — manager action required
+  | 'CORRECTION_REQUESTED'  // manager sent back to employee for correction
+  | 'APPROVED'              // manager approved
 export type PunchType = 'CHECK_IN' | 'BREAK_START' | 'BREAK_END' | 'CHECK_OUT'
 export type CellStatus = 'SHIFT_REQUESTED' | 'CONFIRMED' | 'DAY_OFF_REQUESTED' | 'DAY_OFF_CONFIRMED' | 'ADJUSTING'
 export type PreferenceAvailability = 'PREFERRED' | 'AVAILABLE' | 'UNAVAILABLE'
@@ -60,6 +65,16 @@ export interface ShiftBoard {
   allocationSetup?: AllocationSetup
 }
 
+export interface WorkSession {
+  checkIn?: string
+  checkOut?: string
+  breakMinutes: number
+  actualMinutes: number
+  department?: string
+  punchVariant?: 'NORMAL' | 'HELP' | 'TRAINING'
+  helpStore?: string
+}
+
 export interface AttendanceRecord {
   id: string
   employeeId: string
@@ -71,6 +86,8 @@ export interface AttendanceRecord {
   actualMinutes: number
   overtimeMinutes: number
   punchEvents: PunchEvent[]
+  sessions?: WorkSession[]
+  correctionComment?: string
 }
 
 export interface PunchEvent {
@@ -151,6 +168,32 @@ export interface AllocationTemplate {
 export interface AllocationSetup {
   slots: ShiftSlot[]
   assignments: DaySlotAssignment[]
+}
+
+export interface ComplianceFlag {
+  key: 'no_break' | 'overwork' | 'night'
+  level: 'error' | 'warning' | 'info'
+  icon: string
+  message: string
+}
+
+export type CorrectionRequestStatus = 'pending' | 'approved' | 'rejected'
+export type CorrectionRequestType   = 'edit' | 'add_missing'
+
+export interface CorrectionRequest {
+  id: string
+  type: CorrectionRequestType
+  employeeId: string
+  workDate: string
+  sessionId?: string
+  originalCheckIn?: string
+  originalCheckOut?: string
+  requestedCheckIn: string
+  requestedCheckOut: string
+  reason: string
+  status: CorrectionRequestStatus
+  managerNote?: string
+  createdAt: string
 }
 
 export type SubstitutionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED'
