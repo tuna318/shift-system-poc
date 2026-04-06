@@ -146,5 +146,22 @@ export const useAttendanceStore = defineStore('attendance', {
       cr.status = 'rejected'
       cr.managerNote = note
     },
+
+    /** Revert an approved record back to pending — e.g. manager made a mistake */
+    revertApproval(recordId: string) {
+      const rec = this.records.find(r => r.id === recordId)
+      if (!rec || rec.status !== 'APPROVED') return
+      rec.status = 'PENDING_APPROVAL'
+      rec.approvedAt = undefined
+      rec.approvedBy = undefined
+    },
+
+    /** Cancel a correction request — puts the record back to pending for re-review */
+    cancelReturn(recordId: string) {
+      const rec = this.records.find(r => r.id === recordId)
+      if (!rec || rec.status !== 'CORRECTION_REQUESTED') return
+      rec.status = 'PENDING_APPROVAL'
+      rec.correctionComment = undefined
+    },
   },
 })
