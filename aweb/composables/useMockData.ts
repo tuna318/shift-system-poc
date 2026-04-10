@@ -1313,6 +1313,20 @@ const correctionRequests: CorrectionRequest[] = [
     status: 'pending',
     createdAt: '2026-04-03T19:00:00',
   },
+  // approved — edit: 山田太郎 session 1 on 2026-03-07 (punch machine lag caused recorded times to drift)
+  {
+    id: 'cr-011',
+    type: 'edit',
+    employeeId: 'emp-001',
+    workDate: '2026-03-07',
+    originalCheckIn:  '09:12',
+    originalCheckOut: '14:25',
+    requestedCheckIn:  '09:00',
+    requestedCheckOut: '14:30',
+    reason: '打刻機のタイムラグで出勤・退勤ともに記録時間がずれていました。シフト開始の09:00に入店しており、退勤は14:30が正確です。',
+    status: 'approved',
+    createdAt: '2026-03-08T09:30:00',
+  },
 ]
 
 // ── Shared attendance utilities ────────────────────────────────────────────
