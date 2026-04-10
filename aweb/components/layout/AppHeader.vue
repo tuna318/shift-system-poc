@@ -132,7 +132,6 @@ const breadcrumbs = computed(() => {
     '/shifts/substitutions': '代打・交代',
     '/shifts/cross-shop': '他店舗応援',
     '/attendance': '勤怠管理',
-    '/attendance/approval': '勤怠承認',
     '/attendance/modifications': '修正申請',
     '/employees': 'スタッフ管理',
     '/reports': 'レポート',

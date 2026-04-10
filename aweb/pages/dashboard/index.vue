@@ -8,15 +8,6 @@
       </div>
       <div class="d-flex ga-2">
         <v-btn
-          to="/attendance/approval"
-          variant="tonal"
-          color="primary"
-          prepend-icon="mdi-check-circle-outline"
-          rounded="lg"
-        >
-          勤怠承認
-        </v-btn>
-        <v-btn
           to="/shifts/board/board-2026-03"
           color="primary"
           prepend-icon="mdi-table-large"
@@ -135,7 +126,6 @@ const stats = computed(() => [
 
 const quickActions = [
   { label: 'シフトボードを編集', to: '/shifts/board/board-2026-03', icon: 'mdi-table-edit', color: 'primary' },
-  { label: '勤怠承認', to: '/attendance/approval', icon: 'mdi-check-circle-outline', color: 'success' },
   { label: '修正申請を確認', to: '/attendance/modifications', icon: 'mdi-pencil-outline', color: 'warning' },
   { label: 'スタッフ一覧', to: '/employees', icon: 'mdi-account-group-outline', color: 'default' },
   { label: 'レポート', to: '/reports', icon: 'mdi-chart-bar', color: 'default' },

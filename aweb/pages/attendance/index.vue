@@ -8,9 +8,6 @@
         <p class="text-body-2 text-medium-emphasis mt-1">スタッフの出退勤状況を月単位で管理します</p>
       </div>
       <div class="d-flex ga-2">
-        <v-btn v-if="attStore.pendingApprovalCount > 0" to="/attendance/approval" color="primary" variant="flat" size="small" rounded="lg" prepend-icon="mdi-check-circle-outline">
-          申請済み {{ attStore.pendingApprovalCount }}件
-        </v-btn>
         <v-btn v-if="attStore.pendingCorrectionCount > 0" to="/attendance/modifications" color="warning" variant="tonal" size="small" rounded="lg" prepend-icon="mdi-pencil-outline">
           修正申請 {{ attStore.pendingCorrectionCount }}件
         </v-btn>

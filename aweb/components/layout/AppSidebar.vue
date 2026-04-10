@@ -120,15 +120,6 @@
           class="sidebar-item ml-3"
         />
         <v-list-item
-          to="/attendance/approval"
-          prepend-icon="mdi-check-circle-outline"
-          title="勤怠承認"
-          active-color="white"
-          color="rgba(255,255,255,0.6)"
-          rounded="lg"
-          class="sidebar-item ml-3"
-        />
-        <v-list-item
           to="/attendance/modifications"
           prepend-icon="mdi-pencil-outline"
           title="修正申請"
