@@ -186,6 +186,25 @@
           </v-tooltip>
         </template>
       </v-list-item>
+
+      <!-- Settings -->
+      <v-list-item
+        to="/settings/labor-rules"
+        :prepend-icon="'mdi-cog-outline'"
+        :title="rail ? '' : '設定'"
+        active-color="white"
+        color="rgba(255,255,255,0.6)"
+        rounded="lg"
+        class="sidebar-item"
+      >
+        <template v-if="rail" #prepend>
+          <v-tooltip location="right" text="設定">
+            <template #activator="{ props }">
+              <v-icon v-bind="props">mdi-cog-outline</v-icon>
+            </template>
+          </v-tooltip>
+        </template>
+      </v-list-item>
     </v-list>
 
     <!-- Bottom: store + user -->

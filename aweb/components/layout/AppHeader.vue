@@ -135,6 +135,8 @@ const breadcrumbs = computed(() => {
     '/attendance/modifications': '修正申請',
     '/employees': 'スタッフ管理',
     '/reports': 'レポート',
+    '/settings': '設定',
+    '/settings/labor-rules': '労働ルール',
   }
 
   const segments = route.path.split('/').filter(Boolean)
