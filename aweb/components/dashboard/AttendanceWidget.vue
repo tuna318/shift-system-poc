@@ -55,12 +55,14 @@ import { useMockData } from '~/composables/useMockData'
 
 const { attendanceRecords } = useMockData()
 
-const today = new Date('2026-03-01').toLocaleDateString('ja-JP', {
+const MOCK_TODAY = '2026-03-01'
+
+const today = new Date(MOCK_TODAY).toLocaleDateString('ja-JP', {
   year: 'numeric', month: 'long', day: 'numeric',
 })
 
 const todayRecords = computed(() =>
-  attendanceRecords.filter(r => r.workDate === '2026-03-01')
+  attendanceRecords.filter(r => r.workDate === MOCK_TODAY)
 )
 
 function countStatus(status: string) {

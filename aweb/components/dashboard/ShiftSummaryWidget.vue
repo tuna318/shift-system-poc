@@ -5,7 +5,7 @@
       <span class="text-subtitle-2 font-weight-bold">本日のシフト</span>
     </v-card-title>
     <v-card-subtitle class="px-4 pb-3 text-caption">
-      2026年3月1日（日）
+      {{ todayLabel }}
     </v-card-subtitle>
 
     <v-card-text class="px-4 pb-2">
@@ -71,8 +71,14 @@ import type { CellStatus } from '~/types'
 
 const { currentBoard, getEmployee } = useMockData()
 
+const MOCK_TODAY = '2026-03-01'
+
+const todayLabel = new Date(MOCK_TODAY).toLocaleDateString('ja-JP', {
+  year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
+})
+
 const todayEntries = computed(() =>
-  currentBoard.entries.filter(e => e.shiftDate === '2026-03-01')
+  currentBoard.entries.filter(e => e.shiftDate === MOCK_TODAY)
 )
 
 function cellStatusColor(status: CellStatus) {
